@@ -20,6 +20,7 @@ from enum import Enum
 
 import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view
 
 
 class SwingKind(str, Enum):
@@ -107,17 +108,34 @@ def find_swings(df: pd.DataFrame, left: int = 2, right: int = 2) -> list[Swing]:
     """Fractal pivots: a high with `left` lower highs before and `right` after.
 
     `right` bars of delay is the price of honesty — the pivot is only confirmed
-    at `index + right`.
+    at `index + right`, and every consumer must respect that.
+
+    Vectorised with a sliding window because this is the most-called function in
+    the system: the trend, ICT and classical engines each invoke it, and a
+    backtest calls all three once per replayed bar. The bar-by-bar Python loop
+    it replaces was the single largest cost in a replay. Ties are broken toward
+    the earliest bar (`argmax == left`), exactly as the loop did, so results are
+    identical rather than merely similar.
     """
     highs, lows = df["high"].to_numpy(), df["low"].to_numpy()
+    n = len(df)
+    span = left + right + 1
+    if n < span:
+        return []
+
+    windows_h = sliding_window_view(highs, span)
+    windows_l = sliding_window_view(lows, span)
+    # window k covers bars [k, k+span); its centre is bar k + left
+    is_high = windows_h.argmax(axis=1) == left
+    is_low = windows_l.argmin(axis=1) == left
+
     ts = df.index
     out: list[Swing] = []
-    for i in range(left, len(df) - right):
-        window_h = highs[i - left : i + right + 1]
-        window_l = lows[i - left : i + right + 1]
-        if highs[i] == window_h.max() and (window_h.argmax() == left):
+    for k in range(len(windows_h)):
+        i = k + left
+        if is_high[k]:
             out.append(Swing(SwingKind.HIGH, i, ts[i], float(highs[i]), i + right))
-        elif lows[i] == window_l.min() and (window_l.argmin() == left):
+        elif is_low[k]:
             out.append(Swing(SwingKind.LOW, i, ts[i], float(lows[i]), i + right))
     return out
 
@@ -136,7 +154,7 @@ def classify_structure(swings: list[Swing], lookback: int = 6) -> tuple[int, str
     highs = [s for s in swings if s.kind is SwingKind.HIGH][-lookback:]
     lows = [s for s in swings if s.kind is SwingKind.LOW][-lookback:]
     if len(highs) < 2 or len(lows) < 2:
-        return 0, "بنية غير كافية"
+        return 0, "insufficient structure"
 
     hh = highs[-1].price > highs[-2].price
     hl = lows[-1].price > lows[-2].price
@@ -144,12 +162,12 @@ def classify_structure(swings: list[Swing], lookback: int = 6) -> tuple[int, str
     ll = lows[-1].price < lows[-2].price
 
     if hh and hl:
-        return 1, "قمم وقيعان صاعدة (HH/HL)"
+        return 1, "higher highs and higher lows (HH/HL)"
     if lh and ll:
-        return -1, "قمم وقيعان هابطة (LH/LL)"
+        return -1, "lower highs and lower lows (LH/LL)"
     if hh and ll:
-        return 0, "توسّع نطاق (قمة أعلى وقاع أدنى)"
-    return 0, "نطاق عرضي / بنية مختلطة"
+        return 0, "range expansion (higher high, lower low)"
+    return 0, "range / mixed structure"
 
 
 # --------------------------------------------------------------------------- #
@@ -385,14 +403,14 @@ def premium_discount(df: pd.DataFrame, lookback: int = 60) -> tuple[float, str]:
     window = df.tail(lookback)
     hi, lo = float(window["high"].max()), float(window["low"].min())
     if hi <= lo:
-        return 0.5, "نطاق غير صالح"
+        return 0.5, "invalid range"
     pos = (float(window["close"].iloc[-1]) - lo) / (hi - lo)
     if pos < 0.382:
-        label = "منطقة خصم (Discount) — مواتية للشراء"
+        label = "Discount zone — favourable for longs"
     elif pos > 0.618:
-        label = "منطقة علاوة (Premium) — مواتية للبيع"
+        label = "Premium zone — favourable for shorts"
     else:
-        label = "منطقة توازن (Equilibrium)"
+        label = "Equilibrium zone"
     return float(pos), label
 
 

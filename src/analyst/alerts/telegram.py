@@ -27,7 +27,7 @@ class TelegramNotifier:
 
     def send(self, text: str) -> tuple[bool, str]:
         if not self.enabled:
-            return False, "TELEGRAM_BOT_TOKEN أو TELEGRAM_CHAT_ID غير مضبوط"
+            return False, "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not set"
         try:
             resp = httpx.post(
                 _API.format(token=self.secrets.telegram_bot_token),
@@ -40,11 +40,11 @@ class TelegramNotifier:
                 timeout=self.timeout,
             )
         except httpx.HTTPError as exc:
-            return False, f"فشل الاتصال بتيليجرام: {exc}"
+            return False, f"Telegram request failed: {exc}"
 
         if resp.status_code != 200:
-            return False, f"تيليجرام رفض الرسالة ({resp.status_code}): {resp.text[:200]}"
-        return True, "تم الإرسال"
+            return False, f"Telegram rejected the message ({resp.status_code}): {resp.text[:200]}"
+        return True, "Sent"
 
     def send_alert(self, result: AnalysisResult, text: str) -> bool:
         """Send and log. The log row is what dedupe reads on the next run."""
@@ -63,5 +63,5 @@ class TelegramNotifier:
                 )
             )
         if not ok:
-            log.warning("تعذّر إرسال تنبيه %s: %s", result.symbol, detail)
+            log.warning("Could not send alert for %s: %s", result.symbol, detail)
         return ok

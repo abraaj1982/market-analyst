@@ -17,7 +17,7 @@ from __future__ import annotations
 import pandas as pd
 
 from analyst.core.enums import Regime
-from analyst.indicators.oscillators import bollinger, percentile_rank
+from analyst.indicators.oscillators import bollinger, percentile_of_last
 from analyst.indicators.trend import adx, atr_percent
 
 
@@ -31,13 +31,14 @@ def detect(frame: pd.DataFrame, adx_period: int = 14) -> tuple[Regime, dict[str,
     adx_now = float(adx_frame["adx"].iloc[-1])
 
     # percentile of ATR-as-%-of-price, never of raw ATR (see atr_percent docstring)
+    window = min(252, max(60, len(frame) // 2))
     atr_series = atr_percent(high, low, close, 14)
-    atr_pct = percentile_rank(atr_series, min(252, max(60, len(frame) // 2)))
-    atr_rank = float(atr_pct.iloc[-1]) if pd.notna(atr_pct.iloc[-1]) else 0.5
+    atr_rank = percentile_of_last(atr_series, window)
+    atr_rank = 0.5 if pd.isna(atr_rank) else atr_rank
 
     bb = bollinger(close, 20, 2.0)
-    bw_pct = percentile_rank(bb["bandwidth"], min(252, max(60, len(frame) // 2)))
-    bw_rank = float(bw_pct.iloc[-1]) if pd.notna(bw_pct.iloc[-1]) else 0.5
+    bw_rank = percentile_of_last(bb["bandwidth"], window)
+    bw_rank = 0.5 if pd.isna(bw_rank) else bw_rank
 
     metrics = {
         "adx": round(adx_now, 2),

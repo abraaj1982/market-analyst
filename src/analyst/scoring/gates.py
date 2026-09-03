@@ -56,16 +56,16 @@ class GateEvaluator:
             handler = handlers.get(spec.id)
             if handler is None:
                 out.append(
-                    GateResult(gate=spec.id, label_ar=spec.label_ar,
+                    GateResult(gate=spec.id, label=spec.label,
                                status=GateStatus.NOT_EVALUATED,
-                               detail_ar="لا يوجد منطق مُنفَّذ لهذه البوابة",
+                               detail="No implementation for this gate",
                                blocking=spec.blocking)
                 )
                 continue
             status, detail = handler(spec, ctx, direction, breakdown, engines, risk)
             out.append(
-                GateResult(gate=spec.id, label_ar=spec.label_ar, status=status,
-                           detail_ar=detail, blocking=spec.blocking)
+                GateResult(gate=spec.id, label=spec.label, status=status,
+                           detail=detail, blocking=spec.blocking)
             )
         return out
 
@@ -80,27 +80,27 @@ class GateEvaluator:
         ok = score >= minimum
         return (
             GateStatus.PASSED if ok else GateStatus.FAILED,
-            f"جودة البيانات {score:.0%} مقابل الحد {minimum:.0%}",
+            f"Data quality {score:.0%} against a {minimum:.0%} floor",
         )
 
     def _mtf_alignment(self, spec, ctx, direction, breakdown, engines, risk):
         required = [Timeframe(t) for t in spec.params.get("timeframes", ["1d", "4h"])]
         trend = engines.get("trend")
         if trend is None or trend.skipped_reason:
-            return GateStatus.NOT_EVALUATED, "محرك الاتجاه لم يعمل"
+            return GateStatus.NOT_EVALUATED, "The trend engine did not run"
 
         scores = {}
         for tf in required:
             key = f"{tf.value}_score"
             if key not in trend.metrics:
-                return GateStatus.NOT_EVALUATED, f"لا توجد قراءة لفريم {tf.arabic}"
+                return GateStatus.NOT_EVALUATED, f"No reading for the {tf.label} frame"
             scores[tf] = trend.metrics[key]
 
         deadband = self.settings.scoring.direction_deadband
         signs = {tf: np.sign(v) if abs(v) >= deadband else 0 for tf, v in scores.items()}
         target = float(direction.value)
         ok = all(s == target for s in signs.values())
-        detail = " · ".join(f"{tf.arabic}: {scores[tf]:+.2f}" for tf in required)
+        detail = " · ".join(f"{tf.label}: {scores[tf]:+.2f}" for tf in required)
         return (GateStatus.PASSED if ok else GateStatus.FAILED), detail
 
     def _min_confidence(self, spec, ctx, direction, breakdown, engines, risk):
@@ -108,35 +108,35 @@ class GateEvaluator:
         ok = breakdown.confidence >= minimum
         return (
             GateStatus.PASSED if ok else GateStatus.FAILED,
-            f"درجة الثقة {breakdown.confidence:.0%} مقابل الحد {minimum:.0%}",
+            f"Confidence {breakdown.confidence:.0%} against a {minimum:.0%} floor",
         )
 
     @staticmethod
     def _risk_reward(spec, ctx, direction, breakdown, engines, risk):
         minimum = float(spec.params.get("min_rr", 1.8))
         if risk is None:
-            return GateStatus.NOT_EVALUATED, "لا توجد خطة مخاطرة (لا يوجد اتجاه واضح)"
+            return GateStatus.NOT_EVALUATED, "No risk plan (no clear direction)"
         ok = risk.risk_reward >= minimum
         return (
             GateStatus.PASSED if ok else GateStatus.FAILED,
-            f"العائد للمخاطرة {risk.risk_reward:.2f} مقابل الحد {minimum:.2f}",
+            f"Reward-to-risk {risk.risk_reward:.2f} against a {minimum:.2f} floor",
         )
 
     @staticmethod
     def _news_blackout(spec, ctx, direction, breakdown, engines, risk):
         if ctx.extras.get("calendar_events") is None:
-            return GateStatus.NOT_EVALUATED, "التقويم الاقتصادي غير محمّل"
+            return GateStatus.NOT_EVALUATED, "Economic calendar not loaded"
         blackout = ctx.extras.get("calendar_blackout")
         if blackout is not None:
             return (
                 GateStatus.FAILED,
-                f"{blackout.label_ar} عند {blackout.when:%H:%M} UTC — داخل نافذة الحظر",
+                f"{blackout.label} at {blackout.when:%H:%M} UTC — inside the blackout window",
             )
         upcoming = ctx.extras.get("next_high_impact")
         if upcoming is not None:
             hours = (upcoming.when - ctx.as_of).total_seconds() / 3600.0
-            return GateStatus.PASSED, f"أقرب خبر عالي الأثر بعد {hours:.1f} ساعة ({upcoming.label_ar})"
-        return GateStatus.PASSED, "لا أخبار عالية الأثر في الأفق القريب"
+            return GateStatus.PASSED, f"Next high-impact release in {hours:.1f}h ({upcoming.label})"
+        return GateStatus.PASSED, "No high-impact release on the near horizon"
 
     def _engine_coverage(self, spec, ctx, direction, breakdown, engines, risk):
         min_engines = int(spec.params.get("min_active_engines", 3))
@@ -146,64 +146,64 @@ class GateEvaluator:
         ok = breakdown.active_engines >= min_engines and breakdown.coverage_ratio >= min_ratio
         return (
             GateStatus.PASSED if ok else GateStatus.FAILED,
-            f"{breakdown.active_engines} محرك فعّال · تغطية {breakdown.coverage_ratio:.0%} "
-            f"(الحد: {min_engines} محرك و{min_ratio:.0%})",
+            f"{breakdown.active_engines} active engines · {breakdown.coverage_ratio:.0%} coverage "
+            f"(floor: {min_engines} engines and {min_ratio:.0%})",
         )
 
     def _not_against_higher_trend(self, spec, ctx, direction, breakdown, engines, risk):
         tf = Timeframe(spec.params.get("timeframe", "1d"))
         trend = engines.get("trend")
         if trend is None or f"{tf.value}_score" not in trend.metrics:
-            return GateStatus.NOT_EVALUATED, f"لا توجد قراءة اتجاه على {tf.arabic}"
+            return GateStatus.NOT_EVALUATED, f"No trend reading on {tf.label}"
         score = trend.metrics[f"{tf.value}_score"]
         deadband = self.settings.scoring.direction_deadband
         if abs(score) < deadband:
-            return GateStatus.PASSED, f"اتجاه {tf.arabic} محايد ({score:+.2f}) — لا تعارض"
+            return GateStatus.PASSED, f"{tf.label} trend is neutral ({score:+.2f}) — no conflict"
         against = np.sign(score) != float(direction.value)
         return (
             GateStatus.FAILED if against else GateStatus.PASSED,
-            f"اتجاه {tf.arabic} = {score:+.2f} مقابل إشارة {direction.arabic}",
+            f"{tf.label} trend {score:+.2f} against a {direction.label} signal",
         )
 
     @staticmethod
     def _shortable(spec, ctx, direction, breakdown, engines, risk):
         if direction is not Direction.BEARISH:
-            return GateStatus.PASSED, "الإشارة صاعدة — لا قيد تنفيذي"
+            return GateStatus.PASSED, "Bullish signal — no execution constraint"
         if ctx.instrument.shortable:
-            return GateStatus.PASSED, "البيع على المكشوف متاح في هذا السوق"
+            return GateStatus.PASSED, "Short selling is available in this market"
         return (
             GateStatus.FAILED,
-            "البيع على المكشوف غير متاح للأفراد في هذا السوق — "
-            "الإشارة الهابطة تعني الخروج أو التجنّب، وليست صفقة بيع",
+            "Retail short selling is not available in this market — a bearish "
+            "reading means exit or avoid, not a short trade",
         )
 
     @staticmethod
     def _earnings_blackout(spec, ctx, direction, breakdown, engines, risk):
         if not ctx.instrument.is_equity:
-            return GateStatus.PASSED, "لا ينطبق على غير الأسهم"
+            return GateStatus.PASSED, "Not applicable outside equities"
         fundamentals = ctx.extras.get("fundamentals") or {}
         next_earnings = fundamentals.get("next_earnings")
         if next_earnings is None:
-            return GateStatus.NOT_EVALUATED, "تاريخ إعلان الأرباح القادم غير معروف"
+            return GateStatus.NOT_EVALUATED, "Next earnings date unknown"
         before = timedelta(days=int(spec.params.get("days_before", 2)))
         after = timedelta(days=int(spec.params.get("days_after", 1)))
         delta = next_earnings.to_pydatetime() - ctx.as_of
         if -after <= delta <= before:
             return (
                 GateStatus.FAILED,
-                f"إعلان الأرباح في {next_earnings:%Y-%m-%d} — داخل نافذة الحظر",
+                f"Earnings on {next_earnings:%Y-%m-%d} — inside the blackout window",
             )
-        return GateStatus.PASSED, f"إعلان الأرباح القادم في {next_earnings:%Y-%m-%d}"
+        return GateStatus.PASSED, f"Next earnings on {next_earnings:%Y-%m-%d}"
 
     @staticmethod
     def _volatility_sane(spec, ctx, direction, breakdown, engines, risk):
         rank = ctx.extras.get("regime_metrics", {}).get("atr_percentile")
         if rank is None:
-            return GateStatus.NOT_EVALUATED, "مئين التقلب غير محسوب"
+            return GateStatus.NOT_EVALUATED, "Volatility percentile not computed"
         lo = float(spec.params.get("min_atr_percentile", 0.10))
         hi = float(spec.params.get("max_atr_percentile", 0.95))
         ok = lo <= rank <= hi
         return (
             GateStatus.PASSED if ok else GateStatus.FAILED,
-            f"التقلب عند المئين {rank:.0%} (النطاق المقبول {lo:.0%}–{hi:.0%})",
+            f"Volatility at the {rank:.0%} percentile (accepted band {lo:.0%}–{hi:.0%})",
         )

@@ -54,8 +54,8 @@ class VolumeSeasonalityEngine(Engine):
             self._score_volume(builder, metrics, df)
         else:
             notes.append(
-                "لا توجد أحجام تداول حقيقية لهذا الرمز (طبيعي في الفوركس الفوري) — "
-                "تم تعطيل الجزء الحجمي وقُيّم الموسمية فقط"
+                "No real traded volume for this symbol (normal for spot FX) — "
+                "the volume component is disabled and only seasonality was scored"
             )
 
         daily = ctx.get(Timeframe.D1)
@@ -64,12 +64,12 @@ class VolumeSeasonalityEngine(Engine):
             seasonal_samples = self._score_seasonality(builder, metrics, daily.df, ctx.as_of)
 
         if not builder.items and builder.weight_total == 0:
-            return EngineResult.skipped(self.id, "لا أحجام حقيقية ولا تاريخ يومي كافٍ للموسمية")
+            return EngineResult.skipped(self.id, "No real volume and not enough daily history for seasonality")
 
         quality = (0.65 if has_volume else 0.0) + (
             0.35 * min(1.0, seasonal_samples / 15.0) if seasonal_samples else 0.0
         )
-        return builder.result(self.id, quality=max(quality, 0.15), metrics=metrics, notes_ar=notes)
+        return builder.result(self.id, quality=max(quality, 0.15), metrics=metrics, notes=notes)
 
     # ------------------------------------------------------------------ #
 
@@ -102,18 +102,18 @@ class VolumeSeasonalityEngine(Engine):
         if vol_ratio >= 1.8 and rng_ratio <= 0.7:
             # heavy effort, no result: absorption against the last move
             builder.add(
-                "wyckoff_absorption", "امتصاص (جهد كبير بنتيجة ضعيفة)",
+                "wyckoff_absorption", "Absorption (high effort, poor result)",
                 -np.sign(ret) * 0.7 if ret != 0 else 0.0, 1.2,
-                detail_ar=(
-                    f"حجم {vol_ratio:.1f}× المتوسط بمدى سعري {rng_ratio:.1f}× فقط — "
-                    "طرف كبير يمتص الحركة"
+                detail=(
+                    f"Volume {vol_ratio:.1f}x average on a range of only {rng_ratio:.1f}x "
+                    "— a large participant is absorbing the move"
                 ),
             )
         else:
             builder.add(
-                "volume_confirmation", "تأكيد حجمي للحركة",
+                "volume_confirmation", "Volume confirms the move",
                 clamp(np.sign(ret) * scale(vol_ratio - 1.0, 1.0)), 1.0,
-                detail_ar=f"الحجم {vol_ratio:.1f}× المتوسط مع حركة {ret:+.2%}",
+                detail=f"Volume {vol_ratio:.1f}x average on a {ret:+.2%} move",
             )
 
         # trend of participation over the last 10 bars
@@ -122,11 +122,11 @@ class VolumeSeasonalityEngine(Engine):
         participation = recent_vol / prior_vol - 1.0
         price_change = float(close.iloc[-1] / close.iloc[-11] - 1.0) if len(close) > 11 else 0.0
         builder.add(
-            "participation_trend", "اتجاه المشاركة الحجمية",
+            "participation_trend", "Participation trend",
             clamp(np.sign(price_change) * scale(participation, 0.6)) * 0.6, 0.8,
-            detail_ar=(
-                f"متوسط الحجم في آخر 10 شموع {participation:+.0%} مقارنة بالسابق "
-                f"مع تغيّر سعري {price_change:+.2%}"
+            detail=(
+                f"Average volume over the last 10 bars is {participation:+.0%} versus prior, "
+                f"against a {price_change:+.2%} price change"
             ),
         )
         metrics["participation_change"] = round(participation, 3)
@@ -150,11 +150,11 @@ class VolumeSeasonalityEngine(Engine):
             # a t-like statistic: mean move relative to noise and sample size
             t_stat = mean / (overall_std / np.sqrt(samples))
             builder.add(
-                "seasonality_month", "الموسمية الشهرية",
+                "seasonality_month", "Monthly seasonality",
                 scale(t_stat, 2.5) * 0.6, 0.9,
-                detail_ar=(
-                    f"متوسط العائد اليومي في هذا الشهر {mean:+.3%} عبر {samples} ملاحظة "
-                    f"(إحصائية t = {t_stat:+.2f})"
+                detail=(
+                    f"Mean daily return this month {mean:+.3%} across {samples} observations "
+                    f"(t = {t_stat:+.2f})"
                 ),
             )
             metrics["seasonal_month_mean"] = round(mean, 6)
@@ -163,9 +163,9 @@ class VolumeSeasonalityEngine(Engine):
         if len(dow_returns) >= 30:
             dow_mean = float(dow_returns.mean())
             builder.add(
-                "seasonality_weekday", "الموسمية حسب يوم الأسبوع",
+                "seasonality_weekday", "Day-of-week seasonality",
                 scale(dow_mean / (float(returns.std()) or 1e-9), 0.25) * 0.4, 0.5,
-                detail_ar=f"متوسط عائد هذا اليوم من الأسبوع {dow_mean:+.3%} عبر {len(dow_returns)} ملاحظة",
+                detail=f"Mean return on this weekday {dow_mean:+.3%} across {len(dow_returns)} observations",
             )
             metrics["seasonal_dow_mean"] = round(dow_mean, 6)
 

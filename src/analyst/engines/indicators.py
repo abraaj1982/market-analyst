@@ -22,7 +22,13 @@ from analyst.core.config import Settings
 from analyst.core.enums import EngineId, Regime
 from analyst.core.models import EngineResult, MarketContext
 from analyst.engines.base import Engine, ScoreBuilder, scale
-from analyst.indicators.oscillators import bollinger, macd, percentile_rank, rsi, stochastic
+from analyst.indicators.oscillators import (
+    bollinger,
+    macd,
+    percentile_of_last,
+    rsi,
+    stochastic,
+)
 from analyst.indicators.structure import SwingKind, find_swings
 from analyst.indicators.trend import atr_percent
 
@@ -38,7 +44,7 @@ class IndicatorEngine(Engine):
         tf = tfs[len(tfs) // 2]
         df = ctx.series[tf].df
         if len(df) < 120:
-            return EngineResult.skipped(self.id, f"تاريخ غير كافٍ على {tf.arabic}")
+            return EngineResult.skipped(self.id, f"Not enough history on {tf.label}")
 
         close, high, low = df["close"], df["high"], df["low"]
         trending = ctx.regime in (Regime.TRENDING, Regime.HIGH_VOLATILITY)
@@ -53,21 +59,21 @@ class IndicatorEngine(Engine):
         if trending:
             # momentum reading: distance from 50, same sign as the move
             builder.add(
-                "rsi_momentum", "زخم RSI",
+                "rsi_momentum", "RSI momentum",
                 scale(rsi_now - 50.0, 30.0), 1.0,
-                detail_ar=f"RSI عند {rsi_now:.1f} — يُقرأ كزخم لأن السوق اتجاهي",
+                detail=f"RSI at {rsi_now:.1f} — read as momentum because the market is trending",
             )
         else:
             # mean reversion: extremes push against the current move
             builder.add(
-                "rsi_reversion", "ارتداد RSI من طرف",
+                "rsi_reversion", "RSI mean reversion",
                 -scale(rsi_now - 50.0, 25.0), 1.0,
-                detail_ar=f"RSI عند {rsi_now:.1f} — يُقرأ كارتداد لأن السوق عرضي",
+                detail=f"RSI at {rsi_now:.1f} — read as reversion because the market is ranging",
             )
 
         divergence, div_detail = self._rsi_divergence(df, rsi_series)
         if divergence:
-            builder.add("rsi_divergence", "دايفرجنس RSI", divergence, 1.3, detail_ar=div_detail)
+            builder.add("rsi_divergence", "RSI divergence", divergence, 1.3, detail=div_detail)
             metrics["rsi_divergence"] = divergence
 
         # --- MACD ------------------------------------------------------
@@ -77,15 +83,18 @@ class IndicatorEngine(Engine):
         hist_prev = float(hist.iloc[-2])
         hist_scale = float(hist.abs().tail(120).quantile(0.80)) or 1e-9
         builder.add(
-            "macd_histogram", "هيستوجرام MACD",
+            "macd_histogram", "MACD histogram",
             scale(hist_now, hist_scale), 0.9,
-            detail_ar=f"الهيستوجرام {hist_now:+.5f} ({'يتوسّع' if abs(hist_now) > abs(hist_prev) else 'ينكمش'})",
+            detail=(
+                f"Histogram {hist_now:+.5f} "
+                f"({'expanding' if abs(hist_now) > abs(hist_prev) else 'contracting'})"
+            ),
         )
         if np.sign(hist_now) != np.sign(hist_prev) and hist_now != 0:
             builder.add(
-                "macd_cross", "تقاطع MACD جديد",
+                "macd_cross", "Fresh MACD cross",
                 float(np.sign(hist_now)) * 0.6, 0.8,
-                detail_ar=f"تقاطع {'صاعد' if hist_now > 0 else 'هابط'} على الشمعة الأخيرة",
+                detail=f"{'Bullish' if hist_now > 0 else 'Bearish'} cross on the last bar",
             )
         metrics["macd_hist"] = round(hist_now, 6)
 
@@ -97,23 +106,23 @@ class IndicatorEngine(Engine):
         metrics["bandwidth"] = round(bandwidth, 5)
         if trending:
             builder.add(
-                "bollinger_ride", "ركوب الحزام العلوي/السفلي",
+                "bollinger_ride", "Riding the band",
                 scale(pct_b - 0.5, 0.5) * 0.6, 0.7,
-                detail_ar=f"%B عند {pct_b:.2f} — السير على الحزام تأكيد للاتجاه",
+                detail=f"%B at {pct_b:.2f} — walking the band confirms the trend",
             )
         else:
             builder.add(
-                "bollinger_reversion", "ارتداد من حزام بولنجر",
+                "bollinger_reversion", "Bollinger reversion",
                 -scale(pct_b - 0.5, 0.45), 0.9,
-                detail_ar=f"%B عند {pct_b:.2f} — الأطراف تعني ارتداداً في السوق العرضي",
+                detail=f"%B at {pct_b:.2f} — extremes mean reversion in a range",
             )
 
-        bw_rank = percentile_rank(bb["bandwidth"], min(252, len(df) // 2))
-        bw_now = float(bw_rank.iloc[-1]) if pd.notna(bw_rank.iloc[-1]) else 0.5
+        bw_now = percentile_of_last(bb["bandwidth"], min(252, len(df) // 2))
+        bw_now = 0.5 if pd.isna(bw_now) else bw_now
         if bw_now <= 0.12:
             builder.note(
-                "bollinger_squeeze", "انضغاط حزام بولنجر",
-                f"عرض الحزام في أدنى {bw_now:.0%} من تاريخه — انفجار سعري محتمل بلا اتجاه محدد",
+                "bollinger_squeeze", "Bollinger squeeze",
+                f"Bandwidth in the lowest {bw_now:.0%} of its history — expansion likely, direction unknown",
             )
         metrics["bandwidth_percentile"] = round(bw_now, 3)
 
@@ -122,20 +131,20 @@ class IndicatorEngine(Engine):
         k_now, d_now = float(stoch["k"].iloc[-1]), float(stoch["d"].iloc[-1])
         if not trending and (k_now <= 20 or k_now >= 80):
             builder.add(
-                "stochastic_extreme", "ستوكاستك عند طرف",
+                "stochastic_extreme", "Stochastic at an extreme",
                 -scale(k_now - 50.0, 35.0) * 0.8, 0.6,
-                detail_ar=f"%K عند {k_now:.0f} و%D عند {d_now:.0f}",
+                detail=f"%K at {k_now:.0f}, %D at {d_now:.0f}",
             )
         metrics["stoch_k"] = round(k_now, 2)
 
         # --- volatility context ---------------------------------------
         atr_series = atr_percent(high, low, close, 14)
-        atr_pct = percentile_rank(atr_series, min(252, len(df) // 2))
-        atr_rank = float(atr_pct.iloc[-1]) if pd.notna(atr_pct.iloc[-1]) else 0.5
+        atr_rank = percentile_of_last(atr_series, min(252, len(df) // 2))
+        atr_rank = 0.5 if pd.isna(atr_rank) else atr_rank
         metrics["atr_percentile"] = round(atr_rank, 3)
         if atr_rank >= 0.92:
-            builder.note("volatility_extreme", "تقلب عند طرف تاريخي",
-                         f"ATR في أعلى {atr_rank:.0%} من تاريخه — وقف الخسارة يحتاج مسافة أكبر")
+            builder.note("volatility_extreme", "Volatility at a historical extreme",
+                         f"ATR in the top {atr_rank:.0%} of its history — stops need more room")
 
         quality = min(1.0, len(df) / 250.0)
         return builder.result(self.id, quality=quality, metrics=metrics)
@@ -165,15 +174,15 @@ class IndicatorEngine(Engine):
             r1, r2 = rsi_vals[offset + p1.index], rsi_vals[offset + p2.index]
             if p2.price > p1.price and r2 < r1 - 2:
                 return -0.8, (
-                    f"قمة سعرية أعلى ({p2.price:.4f}) مقابل قمة RSI أدنى "
-                    f"({r2:.0f} مقابل {r1:.0f}) — دايفرجنس هابط"
+                    f"Higher price high ({p2.price:.4f}) against a lower RSI high "
+                    f"({r2:.0f} vs {r1:.0f}) — bearish divergence"
                 )
         if len(lows) == 2:
             p1, p2 = lows
             r1, r2 = rsi_vals[offset + p1.index], rsi_vals[offset + p2.index]
             if p2.price < p1.price and r2 > r1 + 2:
                 return 0.8, (
-                    f"قاع سعري أدنى ({p2.price:.4f}) مقابل قاع RSI أعلى "
-                    f"({r2:.0f} مقابل {r1:.0f}) — دايفرجنس صاعد"
+                    f"Lower price low ({p2.price:.4f}) against a higher RSI low "
+                    f"({r2:.0f} vs {r1:.0f}) — bullish divergence"
                 )
         return 0.0, ""

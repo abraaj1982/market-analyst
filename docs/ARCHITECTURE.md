@@ -1,114 +1,155 @@
-# المعمارية
+# Architecture
 
-## التدفق الكامل
+## The full flow
 
 ```
              ┌──────────────────────────────────────────────┐
-             │  مزودو البيانات (مجانيون بالكامل)             │
-             │  Yahoo · Stooq · FRED · CFTC · تقويم محلي     │
+             │  Data providers — all free, no API key        │
+             │  Yahoo · Stooq · FRED · CFTC · local calendar  │
              └───────────────────┬──────────────────────────┘
                                  ↓
                        CandleRepository
-              (جلب → دمج → تخزين تراكمي في SQLite)
+              (fetch → merge → accumulate in SQLite)
                                  ↓
                         ContextBuilder
-   • جلب أصلي لكل فريم + اشتقاق 4H من 1H بمحاذاة الساعة
-   • حذف الشمعة غير المكتملة (حماية من repainting)
-   • تقييم جودة البيانات (5 فحوص)
-   • كشف نظام السوق (ADX + مئين ATR% + عرض بولنجر)
-   • إرفاق: الكلي · COT · الأساسيات · التقويم
+   • native fetch per timeframe; 4H resampled from 1H, clock-anchored
+   • the forming candle is dropped (repainting guard)
+   • data quality scored across five checks
+   • market regime detected (ADX + ATR% percentile + Bollinger bandwidth)
+   • attaches macro · COT · fundamentals · calendar
                                  ↓
                           MarketContext
-                    (غير قابل للتغيير — دخل نقي)
+                    (immutable — pure input)
                                  ↓
      ┌───────────┬───────────┬───────────┬───────────┬──────────┐
      ↓           ↓           ↓           ↓           ↓          ↓
   Trend      ICT/SMC    ClassicTA   Indicators    Macro       COT
      └───────────┴─────┬─────┴───────────┴───────────┴──────────┘
-                       ↓          Volume/Seasonality · Fundamentals · News
+                       ↓      Volume/Seasonality · Fundamentals · News
                   EngineResult[]
-        (اتجاه + قوة + جودة + أدلة مرقّمة + مقاييس)
+        (direction + strength + quality + numbered evidence)
                        ↓
                    Aggregator
-        وزن فعّال → إجماع S → تشتت D → تماسك C
-              → معايرة K = L(|S|) → ثقة
+        effective weight → consensus S → dispersion D → coherence C
+              → calibration K = L(|S|) → confidence
                        ↓
         ┌──────────────┴──────────────┐
         ↓                             ↓
    GateEvaluator                  RiskPlanner
- (بوابات صلبة boolean)       (دخول · وقف · أهداف · R:R)
+  (boolean hard gates)      (entry · stop · targets · R:R)
         └──────────────┬──────────────┘
                        ↓
                  AnalysisResult
                        ↓
      ┌─────────────┬───────────────┬────────────────┐
      ↓             ↓               ↓                ↓
-  تقرير عربي   قاعدة البيانات   لوحة RTL      تنبيه تيليجرام
-   (قوالب)      + Signal        + REST API      (بعد Dedupe)
+   Report        Database      Dashboard      Telegram alert
+  (templates)   + Signal       + REST API     (after dedupe)
                        ↓
                 OutcomeTracker
-        (ماذا حدث فعلاً: TP / SL / انتهاء)
+        (what actually happened: TP / SL / expiry)
                        ↓
-              إحصائيات أداء حقيقية
+              Real performance statistics
+                       ↓
+                  Backtester
+     (point-in-time replay + reliability curve → calibrate)
+```
+
+A second, deliberately separate path exists for companies with no price feed:
+
+```
+ManualCompany (hand-entered figures)  +  CompanyNews (announcements)
+                       ↓
+        DividendEngine        SentimentEngine (keyword lexicon, EN + AR)
+                       ↓
+          weighted mean, capped at 85% confidence
+                       ↓
+              CompanyAssessment — no trade plan, by design
 ```
 
 ---
 
-## القرارات المعمارية وأسبابها
+## Decisions and their reasons
 
-### المحركات دوال نقية
-`Engine._run(MarketContext) → EngineResult`. لا شبكة، لا قاعدة بيانات، لا حالة.
-هذا ما يجعل كل محرك قابلاً للاختبار وحده، ويجعل أي تحليل مخزّن قابلاً لإعادة
-الإنتاج بالضبط. العزل عبر `analyse()` يحوّل أي انهيار داخل محرك إلى
-`skipped_reason` — محرك ينهار لا يُسقط الدورة، بل يُعيد المجمّع توزيع وزنه.
+### Engines are pure functions
+`Engine._run(MarketContext) → EngineResult`. No network, no database, no state.
+That is what makes each engine individually testable and any stored analysis
+exactly reproducible. The `analyse()` wrapper turns any crash inside an engine
+into a `skipped_reason`: a failing engine never takes down the run, and the
+aggregator redistributes its weight.
 
-### الشموع تُخزَّن ولا يُعاد جلبها
-المزودون المجانيون يحدّون التاريخ اللحظي (60 يوماً لـ 15د، سنتان لـ 1س).
-التخزين التراكمي هو الطريق الوحيد لبناء تاريخ لحظي متعدد السنوات — وهو الطريق
-**الوحيد** أصلاً للسوق العماني حيث لا يوجد API تاريخي مجاني.
+### Candles are stored, never just re-fetched
+Free providers cap intraday history (60 days for 15m, two years for 1h).
+Accumulating locally is the only path to multi-year intraday history — and the
+only path at all for a market with no historical API.
 
-### الشمعة غير المكتملة تُحذف دائماً
-آخر شمعة من أي مزود مفتوحة غالباً. تحليلها يعني أن الناتج يتغيّر بصمت مع تطوّر
-الشمعة، وأن أي دراسة تاريخية عليه خيال.
+### The forming candle is always dropped
+The most recent bar from any provider is usually still open. Analysing it means
+the output silently changes as the bar develops, and any historical study of it
+is fiction.
 
-### 4H تُبنى بمحاذاة الساعة لا بمحاذاة التحميل
-`origin="epoch"` يثبّت الحدود على 00/04/08/12/16/20 UTC. بدونها تنزلق الحدود مع
-أول شمعة في التحميل، وتنزلق معها كل مستويات البنية السعرية.
+### 4H is anchored to the clock, not to the download
+`origin="epoch"` pins boundaries to 00/04/08/12/16/20 UTC. Without it the
+boundaries drift with whatever bar the download happened to start on, and every
+structure level drifts with them.
 
-### ATR يُقاس كنسبة من السعر
-ATR المطلق ينمو مع السعر، فمئينه يعلن "تقلباً قياسياً" عند قمة كل اتجاه صاعد
-طويل و"هدوءاً ميتاً" عند قاع كل هابط. تحيّز بنيوي لا ملاحظة سوقية.
+### ATR is measured as a percentage of price
+Absolute ATR grows with price, so its percentile declares "record volatility" at
+the top of every long uptrend and "dead calm" at the bottom of every downtrend.
+That is a structural bias, not a market observation.
 
-### التقارير قوالب حتمية بلا LLM
-أرخص، أسرع، لا تهلوس، ومتطابقة بايت-ببايت لنفس المدخلات — فتصبح قابلة للاختبار
-والمقارنة (diff).
+### Backtests see the same window as live
+The replay trims each timeframe to the same bar count the live path fetches.
+Without that, a decision replayed late in the history would see years of bars
+where the live system sees weeks, and the two would compute different EMAs for
+the same moment — at which point the backtest stops describing the system.
+
+### Reports are deterministic templates, not generated text
+Cheaper, faster, incapable of hallucinating, and byte-identical for identical
+inputs — which makes them diffable and testable.
+
+### Performance work that was also correctness work
+* `find_swings` is vectorised with a sliding window (3.2x faster, provably
+  identical output). It is the most-called function in the system.
+* `percentile_of_last` replaced a `rolling().apply()` that computed a full
+  series when every caller read only the final value (40x faster).
+* The ICT engine looks at a bounded window of history: an order block from three
+  thousand bars ago is not a level anyone trades against.
 
 ---
 
-## خريطة الملفات
+## File map
 
-| المسار | المسؤولية |
+| Path | Responsibility |
 |---|---|
-| `core/` | الأنواع، التعدادات، الإعدادات، الوقت، الأخطاء |
-| `indicators/` | رياضيات نقية: مؤشرات + بنية سعرية (ICT primitives) |
-| `data/providers/` | كل تعامل مع مصادر خارجية خلف واجهة موحّدة |
-| `data/repository.py` | الجسر الوحيد بين المزودين وقاعدة البيانات |
-| `data/quality.py` | خمسة فحوص جودة → درجة [0,1] تدخل المعادلة مباشرة |
-| `data/context.py` | تجميع `MarketContext` — نقطة الالتقاء الوحيدة للـ I/O |
-| `regime.py` | تصنيف نظام السوق |
-| `engines/` | تسعة محركات، كل منها مدرسة تحليل مستقلة |
-| `scoring/` | المجمّع + البوابات + خطة المخاطرة |
-| `reporting/` | قوالب عربية + تنسيق تيليجرام |
-| `alerts/` | كتم التكرار + الإرسال |
-| `tracking/` | التتبّع الأمامي + الإحصاءات الحية |
-| `storage/` | مخطط قاعدة البيانات + الجلسات |
-| `api/` + `web/` | REST + لوحة RTL |
-| `scheduler/` | الجدولة الدورية |
+| `core/` | Types, enums, settings, time, errors |
+| `indicators/` | Pure maths: indicators and structure primitives |
+| `data/providers/` | Every external source, behind one interface |
+| `data/repository.py` | The only bridge between providers and the database |
+| `data/quality.py` | Five checks → a [0,1] score that enters the formula |
+| `data/context.py` | Builds `MarketContext` — the single I/O meeting point |
+| `regime.py` | Market regime classification |
+| `engines/` | Nine engines, each an independent school of analysis |
+| `manual/` | Companies with no price feed: lexicon, engines, register |
+| `scoring/` | Aggregator, gates, risk plan |
+| `reporting/` | Deterministic templates and Telegram formatting |
+| `alerts/` | Suppression and delivery |
+| `tracking/` | Forward-test ledger and live statistics |
+| `backtest/` | Point-in-time replay, metrics, calibration review |
+| `storage/` | Schema, sessions, in-place migrations |
+| `api/` + `web/` | REST API and the dashboard |
+| `scheduler/` | Periodic jobs |
 
 ---
 
-## الانتقال إلى PostgreSQL
+## Moving to PostgreSQL
 
-غيّر `ANALYST_DATABASE_URL` فقط. مخطط SQLAlchemy محايد، وقيد `ON CONFLICT`
-الوحيد الخاص بـ SQLite في `repository.store()` يحتاج تبديلاً بمكافئه في
-PostgreSQL عند الترحيل.
+Change `ANALYST_DATABASE_URL`. The SQLAlchemy schema is portable; the one
+SQLite-specific construct is the `ON CONFLICT` upsert in `repository.store()`,
+which needs its PostgreSQL equivalent.
+
+## Schema migrations
+
+`storage/db.py` applies in-place column renames on startup (`_RENAMES`).
+`create_all` only ever creates missing tables — it never alters an existing one
+— so an upgraded install would otherwise fail on the first insert.

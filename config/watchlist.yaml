@@ -1,21 +1,26 @@
 # ============================================================================
-#  قائمة المتابعة — هذا هو الملف الوحيد الذي تحتاج تعديله عادة.
-#  أضف أو احذف رموزاً ثم أعد التشغيل. النظام يقرأ البيانات مباشرة، لا نسخ يدوي.
+#  Watchlist — normally the only file you need to edit.
+#  Add or remove symbols, then restart. The system fetches data itself; there
+#  is no manual copying of prices anywhere.
+#
+#  Companies with no price feed at all (Muscat Stock Exchange and similar) are
+#  NOT listed here. They live in the manual companies register instead, which
+#  is managed from the dashboard — see docs/MSX.md.
 # ============================================================================
 
 instruments:
 
-  # ---------------- المعادن والفوركس (24/5) ----------------
+  # ---------------- Metals and FX (24/5) ----------------
   - symbol: XAUUSD
-    name_ar: "الذهب / الدولار"
+    name: "Gold / US Dollar"
     market: global_fx
     asset_class: metal
-    provider_symbol: "GC=F"          # عقود الذهب COMEX — أعمق سيولة وأنظف تاريخ
+    provider_symbol: "GC=F"          # COMEX gold futures: deepest liquidity, cleanest history
     fallback_symbols: ["XAUUSD=X", "GLD"]
     price_decimals: 2
 
   - symbol: XAGUSD
-    name_ar: "الفضة / الدولار"
+    name: "Silver / US Dollar"
     market: global_fx
     asset_class: metal
     provider_symbol: "SI=F"
@@ -23,65 +28,50 @@ instruments:
     price_decimals: 3
 
   - symbol: EURUSD
-    name_ar: "اليورو / الدولار"
+    name: "Euro / US Dollar"
     market: global_fx
     asset_class: fx
     provider_symbol: "EURUSD=X"
     price_decimals: 5
 
   - symbol: GBPUSD
-    name_ar: "الجنيه / الدولار"
+    name: "British Pound / US Dollar"
     market: global_fx
     asset_class: fx
     provider_symbol: "GBPUSD=X"
     price_decimals: 5
 
   - symbol: USDJPY
-    name_ar: "الدولار / الين"
+    name: "US Dollar / Japanese Yen"
     market: global_fx
     asset_class: fx
     provider_symbol: "USDJPY=X"
     price_decimals: 3
 
-  # ---------------- المؤشرات الأمريكية ----------------
+  # ---------------- US indices ----------------
   - symbol: SPX
-    name_ar: "مؤشر ستاندرد آند بورز 500"
+    name: "S&P 500"
     market: us
     asset_class: index
     provider_symbol: "^GSPC"
     price_decimals: 2
 
   - symbol: NDX
-    name_ar: "مؤشر ناسداك 100"
+    name: "Nasdaq 100"
     market: us
     asset_class: index
     provider_symbol: "^NDX"
     price_decimals: 2
 
-  # ---------------- أسهم أمريكية ----------------
+  # ---------------- US equities ----------------
   - symbol: AAPL
-    name_ar: "آبل"
+    name: "Apple Inc."
     market: us
     asset_class: equity
     provider_symbol: "AAPL"
 
   - symbol: NVDA
-    name_ar: "إنفيديا"
+    name: "NVIDIA Corporation"
     market: us
     asset_class: equity
     provider_symbol: "NVDA"
-
-  # ---------------- السوق العماني (يومي فقط — مصدر تجريبي) ----------------
-  # ملاحظة: بيانات MSX غير متاحة عبر API مجاني موثوق.
-  # النظام يخزّن ما يجمعه يومياً ويبني التاريخ تراكمياً، ويعطّل تلقائياً
-  # المحركات التي لا تكفيها البيانات بدل إخراج تحليل وهمي.
-  - symbol: BKMB
-    name_ar: "بنك مسقط"
-    market: msx
-    asset_class: equity
-    provider_symbol: "BKMB"
-    currency: OMR
-    supported_timeframes: ["1d", "1wk"]
-    shortable: false
-    price_decimals: 3
-    enabled: false        # فعّلها بعد ربط مصدر بيانات MSX (راجع docs/MSX.md)

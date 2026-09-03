@@ -66,11 +66,34 @@ def rate_of_change(close: pd.Series, period: int = 20) -> pd.Series:
     return 100.0 * (close / close.shift(period) - 1.0)
 
 
-def percentile_rank(series: pd.Series, window: int = 252) -> pd.Series:
-    """Rolling percentile of the latest value within its own recent history.
+def percentile_of_last(series: pd.Series, window: int = 252) -> float:
+    """Percentile of the most recent value within its own recent history.
 
-    Used to answer "is today's volatility high *for this instrument*", which is
-    the only comparison that means anything across asset classes.
+    Answers "is today's volatility high *for this instrument*", which is the
+    only volatility comparison that means anything across asset classes.
+
+    This is the scalar form, and it is what every caller actually needs. The
+    rolling form below computes the same thing for every bar via
+    `rolling().apply()`, which is a Python-level loop over each window: on a
+    6000-bar frame with a 252-bar window that is roughly 1.5 million operations,
+    and it was by a wide margin the slowest thing in the system. A backtest
+    calls it several times per replayed step, so the difference is a replay that
+    takes seconds rather than minutes.
+    """
+    values = series.dropna().to_numpy()
+    if len(values) < max(20, window // 5):
+        return float("nan")
+    window_values = values[-window:]
+    if len(window_values) < 2:
+        return float("nan")
+    last = window_values[-1]
+    return float((window_values <= last).sum() - 1) / float(len(window_values) - 1)
+
+
+def percentile_rank(series: pd.Series, window: int = 252) -> pd.Series:
+    """Rolling percentile for every bar.
+
+    Kept for charting and research. Hot paths must use `percentile_of_last`.
     """
     def _rank(window_values: np.ndarray) -> float:
         last = window_values[-1]

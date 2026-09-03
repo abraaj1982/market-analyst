@@ -1,66 +1,83 @@
-# دليل التشغيل
+# Runbook
 
-## أول مرة (ويندوز)
+## First run (Windows)
 
-1. ثبّت [Python 3.11+](https://www.python.org/downloads/) — **فعّل خيار
-   "Add Python to PATH"** أثناء التثبيت.
-2. انقر نقراً مزدوجاً على **`run-demo.bat`** — تجربة فورية ببيانات تركيبية،
-   بلا إنترنت وبلا مفاتيح.
-3. للتشغيل الحقيقي: انقر **`run.bat`** ثم افتح <http://127.0.0.1:8000>.
+1. Install [Python 3.11+](https://www.python.org/downloads/) — **tick "Add
+   Python to PATH"** during installation.
+2. Double-click **`run-demo.bat`** — an immediate trial on synthetic data, with
+   no internet and no keys.
+3. For the real thing: **`run.bat`**, then open <http://127.0.0.1:8000>.
 
-## الأوامر
+## Commands
 
 ```bash
-analyst analyze                    # تحليل كل قائمة المتابعة
-analyst analyze XAUUSD EURUSD      # رموز محددة
-analyst analyze --offline          # بيانات تركيبية، بلا إنترنت
-analyst analyze --full             # مع التقرير الكامل لكل رمز
+analyst analyze                    # analyse the whole watchlist
+analyst analyze XAUUSD EURUSD      # specific symbols
+analyst analyze --offline          # synthetic data, no internet
+analyst analyze --full             # include the full report for each symbol
 
-analyst report XAUUSD              # تقرير مفصّل لرمز واحد
+analyst report XAUUSD              # detailed report for one symbol
 analyst report XAUUSD --save-to r.txt
 
-analyst digest                     # التقرير اليومي المجمّع
-analyst digest --send              # وأرسله على تيليجرام
+analyst digest                     # daily roundup
+analyst digest --send              # and send it over Telegram
 
-analyst serve                      # اللوحة + الجدولة الدورية
-analyst serve --no-schedule        # اللوحة فقط
+analyst serve                      # dashboard + scheduler
+analyst serve --no-schedule        # dashboard only
 
-analyst stats                      # أداء التتبّع الأمامي الحقيقي
-analyst status                     # فحص صحة الإعداد والتغطية
-analyst test-alert                 # اختبار اتصال تيليجرام
-analyst export XAUUSD -o a.json    # تصدير تحليل كامل للتدقيق
+analyst stats                      # real forward-test performance
+analyst backtest XAUUSD            # point-in-time replay of stored history
+analyst calibrate                  # review whether confidence is honest
+
+analyst status                     # configuration and coverage health
+analyst test-alert                 # Telegram connectivity check
+analyst export XAUUSD -o a.json    # full analysis as JSON
+
+analyst company list               # the manual register
+analyst company add BKMB --name "Bank Muscat" --price 0.240 \
+    --dividend 0.018 --eps 0.030 --years-paid 7
+analyst company news BKMB "Board raises dividend after record profit"
+analyst company assess BKMB
 ```
 
-## المهام الدورية
+## Scheduled jobs
 
-| المهمة | التكرار | المصدر |
+| Job | Cadence | Configured in |
 |---|---|---|
-| دورة التحليل | كل 30 دقيقة (ملف swing) | `settings.yaml → profiles` |
-| التقرير اليومي | 7:00 بتوقيت مسقط | `alerts.daily_digest_hour_local` |
-| الصيانة + تتبّع النتائج | 2:30 UTC يومياً | مثبّتة في `scheduler/jobs.py` |
+| Analysis cycle | every 30 minutes (swing profile) | `settings.yaml → profiles` |
+| Daily digest | 07:00 local | `alerts.daily_digest_hour_local` |
+| Maintenance + outcome tracking | 02:30 UTC | `scheduler/jobs.py` |
 
-## الصيانة الدورية المطلوبة منك
+## Recurring maintenance
 
-| كل | المهمة |
+| Every | Task |
 |---|---|
-| **سنة** | حدّث تواريخ FOMC في `config/calendar.yaml` من [موقع الفيدرالي](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm) — دقيقتان |
-| **شهر** | `analyst stats` وراجع الأداء التراكمي |
-| **بعد 100 صفقة محسومة** | أعد معايرة `calibration` و`weights` (راجع `SCORING.md`) |
-| **أسبوع** | راجع `data/logs/analyst.log` بحثاً عن `WARNING` متكررة |
+| **Year** | Refresh FOMC dates in `config/calendar.yaml` from the [Fed's calendar](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm) — two minutes |
+| **Month** | `analyst stats` — review cumulative performance |
+| **After ~100 resolved signals** | `analyst calibrate` and consider the suggested change |
+| **Week** | Skim `data/logs/analyst.log` for repeated warnings |
 
-## نسخ احتياطي
+## Backup
 
-كل شيء في ملف واحد: `data/analyst.db`. أوقف النظام وانسخه.
-هذا الملف يحوي كل الشموع المتراكمة وكل التحليلات وكل نتائج التتبّع — وهو
-الأصل الحقيقي للمشروع مع مرور الوقت.
+Everything lives in one file: `data/analyst.db`. Stop the system and copy it.
+It holds every accumulated candle, every analysis and every tracked outcome —
+over time it becomes the most valuable part of the project.
 
-## حل المشاكل
+## Performance notes
 
-| العَرَض | السبب والحل |
+A full analysis of one symbol takes roughly 80 ms, so a nine-symbol cycle is
+well under a second. A backtest replays one step per N bars, at about the same
+cost per step: a year of hourly data at `--step 6` is roughly 1,400 steps, so
+expect a couple of minutes. Raise `--step` for a faster, coarser pass.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
 |---|---|
-| `DataUnavailableError` لرمز واحد | المزود رفض الرمز. جرّب `fallback_symbols` في `watchlist.yaml` |
-| كل الرموز NO_TRADE | طبيعي غالباً. راجع `analyst report <رمز>` لترى أي بوابة سقطت |
-| اللوحة بلا شموع | مكتبة الرسم تُحمّل من CDN وتحتاج إنترنت. بقية اللوحة تعمل |
-| لا تصل تنبيهات | `analyst test-alert` — تحقق من `.env` |
-| `no space left on device` | احذف `data/logs/` القديمة أو خفّض `candle_retention_days` |
-| البيانات لا تتحدث | تأكد أن `serve` يعمل بـ `--schedule` (الافتراضي) |
+| `DataUnavailableError` for one symbol | The provider rejected the ticker. Try `fallback_symbols` in `watchlist.yaml` |
+| Everything reads NO_TRADE | Usually correct. `analyst report <symbol>` shows which gate failed |
+| Dashboard has no chart | The chart library loads from a CDN and needs internet. Everything else works |
+| No alerts arriving | `analyst test-alert`, then check `.env` |
+| `no space left on device` | Clear `data/logs/` or lower `candle_retention_days` |
+| Data not refreshing | Make sure `serve` is running with `--schedule` (the default) |
+| Backtest reports 0 signals | Not enough stored history yet — run `analyst analyze` for a while first |

@@ -38,6 +38,16 @@ from analyst.indicators.trend import atr
 #: How recent an event must be (in bars) to still matter.
 RECENCY = {"sweep": 12, "structure": 20, "zone": 120}
 
+#: Bars of history the structure work looks at.
+#:
+#: An order block or liquidity sweep from three thousand bars ago is not a level
+#: anyone is trading against - it is noise that survived. Capping the window is
+#: therefore more correct, not just faster. It also matters a great deal for
+#: cost: swing detection and sweep matching are the most expensive functions in
+#: the system, and a backtest calls them once per replayed step, so an uncapped
+#: window turns a one-minute replay into a ten-minute one.
+STRUCTURE_WINDOW = 800
+
 
 class IctSmcEngine(Engine):
     id = EngineId.ICT_SMC
@@ -49,9 +59,9 @@ class IctSmcEngine(Engine):
         entry_tf = min(ctx.series, key=lambda tf: tf.minutes)
         higher_tf = max(ctx.series, key=lambda tf: tf.minutes)
         series = ctx.series[entry_tf]
-        df = series.df
-        if len(df) < 150:
-            return EngineResult.skipped(self.id, f"تاريخ غير كافٍ على {entry_tf.arabic}")
+        if len(series) < 150:
+            return EngineResult.skipped(self.id, f"Not enough history on {entry_tf.label}")
+        df = series.df.tail(STRUCTURE_WINDOW)
 
         atr_series = atr(df["high"], df["low"], df["close"], 14)
         price = float(df["close"].iloc[-1])
@@ -76,21 +86,21 @@ class IctSmcEngine(Engine):
             value = sweep.direction * clamp(0.55 + 0.45 * scale(sweep.penetration_atr, 1.2)) * decay
             builder.add(
                 "liquidity_sweep",
-                "سحب سيولة مؤكد",
+                "Confirmed liquidity sweep",
                 value,
                 1.5,
-                detail_ar=(
-                    f"تم اختراق مستوى {sweep.swept_level:.4f} بعمق "
-                    f"{sweep.penetration_atr:.2f} ATR ثم أُغلق السعر عائداً خلال "
-                    f"{sweep.reclaim_bars} شمعة (قبل {bars_ago} شمعة)"
+                detail=(
+                    f"Level {sweep.swept_level:.4f} was run by "
+                    f"{sweep.penetration_atr:.2f} ATR and reclaimed within "
+                    f"{sweep.reclaim_bars} bar(s), {bars_ago} bars ago"
                 ),
             )
             metrics["sweep_direction"] = float(sweep.direction)
             metrics["sweep_penetration_atr"] = sweep.penetration_atr
         else:
-            builder.add("liquidity_sweep", "سحب سيولة", 0.0, 1.5)
-            builder.note("no_sweep", "لا يوجد سحب سيولة حديث",
-                         "الإشارة تفتقد المحفّز الأساسي في منهج ICT")
+            builder.add("liquidity_sweep", "Liquidity sweep", 0.0, 1.5)
+            builder.note("no_sweep", "No recent liquidity sweep",
+                         "The setup lacks the primary ICT trigger")
 
         # 2 --------------------------------------------------- structure
         recent_events = [e for e in events if last_index - e.index <= RECENCY["structure"]]
@@ -102,23 +112,24 @@ class IctSmcEngine(Engine):
             value *= 1.0 - bars_ago / (RECENCY["structure"] + 1) * 0.5
             builder.add(
                 f"structure_{ev.kind.lower()}",
-                f"{'تغيّر في الشخصية (CHoCH)' if ev.kind == 'CHoCH' else 'كسر بنية (BOS)'}",
+                ("Change of character (CHoCH)" if ev.kind == "CHoCH"
+                 else "Break of structure (BOS)"),
                 value,
                 1.2,
-                detail_ar=(
-                    f"كسر مستوى {ev.level:.4f} بساق دافعة قدرها "
-                    f"{ev.displacement_atr:.2f} ATR (قبل {bars_ago} شمعة)"
+                detail=(
+                    f"Broke {ev.level:.4f} on a {ev.displacement_atr:.2f} ATR "
+                    f"impulse leg, {bars_ago} bars ago"
                 ),
             )
             metrics["structure_event_direction"] = float(ev.direction)
             metrics["structure_displacement_atr"] = ev.displacement_atr
             # sweep -> CHoCH in the same direction is the textbook reversal
             if recent_sweeps and ev.kind == "CHoCH" and ev.direction == recent_sweeps[-1].direction:
-                builder.add("sweep_choch_sequence", "تسلسل: سحب سيولة ثم CHoCH",
+                builder.add("sweep_choch_sequence", "Sequence: sweep then CHoCH",
                             ev.direction * 0.9, 0.8,
-                            detail_ar="التسلسل النموذجي للانعكاس في منهج ICT")
+                            detail="The textbook ICT reversal sequence")
         else:
-            builder.add("structure_event", "كسر بنية حديث", 0.0, 1.2)
+            builder.add("structure_event", "Recent structure break", 0.0, 1.2)
 
         # 3 ------------------------------------------------- order block
         live_obs = [
@@ -128,9 +139,9 @@ class IctSmcEngine(Engine):
         ob_hit = next((z for z in reversed(live_obs) if z.contains(price)), None)
         if ob_hit is not None:
             builder.add(
-                "order_block_entry", "السعر داخل Order Block فعّال",
+                "order_block_entry", "Price inside a live order block",
                 ob_hit.direction * (0.6 + 0.4 * ob_hit.strength), 1.1,
-                detail_ar=f"المنطقة [{ob_hit.bottom:.4f} – {ob_hit.top:.4f}] بقوة {ob_hit.strength:.2f}",
+                detail=f"Zone [{ob_hit.bottom:.4f} – {ob_hit.top:.4f}], strength {ob_hit.strength:.2f}",
             )
             metrics["in_order_block"] = float(ob_hit.direction)
         elif live_obs:
@@ -138,9 +149,9 @@ class IctSmcEngine(Engine):
             distance_atr = abs(price - nearest.mid) / max(atr_now, 1e-9)
             if distance_atr <= 2.0:
                 builder.add(
-                    "order_block_near", "اقتراب من Order Block",
+                    "order_block_near", "Approaching an order block",
                     nearest.direction * 0.35 * (1 - distance_atr / 2.0), 0.7,
-                    detail_ar=f"يبعد {distance_atr:.2f} ATR عن منتصف المنطقة",
+                    detail=f"{distance_atr:.2f} ATR from the zone midpoint",
                 )
             metrics["nearest_ob_distance_atr"] = round(distance_atr, 3)
 
@@ -153,11 +164,11 @@ class IctSmcEngine(Engine):
             inside = nearest_gap.contains(price)
             builder.add(
                 "fair_value_gap",
-                "فجوة قيمة عادلة (FVG) غير مُغطاة",
+                "Unmitigated fair value gap (FVG)",
                 nearest_gap.direction * (0.55 if inside else 0.28) * (0.5 + 0.5 * nearest_gap.strength),
                 0.8,
-                detail_ar=(
-                    f"{'السعر داخل الفجوة' if inside else 'فجوة قريبة'} "
+                detail=(
+                    f"{'Price inside the gap' if inside else 'Nearby gap'} "
                     f"[{nearest_gap.bottom:.4f} – {nearest_gap.top:.4f}]"
                 ),
             )
@@ -169,9 +180,9 @@ class IctSmcEngine(Engine):
         # discount favours longs (+) and premium favours shorts (-)
         pd_score = clamp((0.5 - pos) * 2.4)
         builder.add(
-            "premium_discount", f"موقع السعر في نطاق {higher_tf.arabic}",
+            "premium_discount", f"Position within the {higher_tf.label} range",
             pd_score, 0.9,
-            detail_ar=f"{label} — عند {pos:.0%} من النطاق",
+            detail=f"{label} — at {pos:.0%} of the range",
             record_when_zero=True,
         )
         metrics["range_position"] = round(pos, 4)
@@ -179,8 +190,10 @@ class IctSmcEngine(Engine):
         quality = self._quality(len(df), bool(recent_sweeps), bool(events), atr_now)
         notes = []
         if series.derived:
-            notes.append(f"فريم {entry_tf.arabic} مُشتق بإعادة تجميع وليس أصلياً من المزود")
-        return builder.result(self.id, quality=quality, metrics=metrics, notes_ar=notes)
+            notes.append(
+                f"{entry_tf.label} frame is resampled, not native from the provider"
+            )
+        return builder.result(self.id, quality=quality, metrics=metrics, notes=notes)
 
     @staticmethod
     def _quality(bars: int, has_sweep: bool, has_events: bool, atr_now: float) -> float:

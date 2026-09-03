@@ -1,50 +1,60 @@
-# السوق العماني (MSX) — الوضع الحقيقي بلا تجميل
+# Muscat Stock Exchange (MSX) — the honest position
 
-## الخلاصة
+## The short version
 
-**لا يوجد مصدر بيانات مجاني وموثوق عبر API لبورصة مسقط.** هذه حقيقة فنية، وأي
-حل يدّعي غير ذلك إما يكشط موقعاً بشكل هشّ أو يبيعك اشتراكاً مؤسسياً.
+**There is no free, reliable API for MSX price data.** That is a technical fact,
+not a limitation of this system. Anything claiming otherwise is either scraping
+a site fragilely or selling an institutional feed.
 
-## ما تم التحقق منه
+## What was checked
 
-| المصدر | ما يقدمه | الحكم |
+| Source | What it offers | Verdict |
 |---|---|---|
-| ICE Consolidated Feed | البيانات الرسمية المرخّصة (Level 1/2 + تاريخي) | مؤسسي — مئات إلى آلاف الدولارات شهرياً |
-| موقع MSX الرسمي `msx.om` | بيانات متأخرة 15 دقيقة + نشرات تداول يومية | متاح مجاناً، لكن **EOD عملياً** وبلا API رسمي |
-| TradingView | يغطي MSX في الواجهة | لا API رسمي للبيانات — غير قابل للاعتماد برمجياً |
-| EODHD / TwelveData / Polygon | تغطيتهم لـ MSX **غير مؤكدة** | يحتاج تحققاً بحساب تجريبي |
+| ICE Consolidated Feed | The licensed official data (L1/L2 + history) | Institutional — hundreds to thousands per month |
+| `msx.om` official site | 15-minute delayed data plus daily bulletins | Free, but effectively end-of-day and with no official API |
+| TradingView | Covers MSX in the interface | No official data API — not usable programmatically |
+| EODHD / TwelveData / Polygon | Coverage of MSX **unconfirmed** | Worth checking with a trial account |
 
-## كيف يتعامل النظام مع هذا
+## What this system does instead
 
-بدل إخراج تحليل وهمي، النظام يعلن قدراته لكل سوق:
+Rather than produce a fake analysis, it offers a **manual company register** —
+available in the dashboard under the *Companies* tab, and from the CLI under
+`analyst company`.
 
-```yaml
-- symbol: BKMB
-  market: msx
-  supported_timeframes: ["1d", "1wk"]   # لا فريمات لحظية
-  shortable: false                       # لا بيع على المكشوف للأفراد
-  enabled: false                         # حتى تربط مصدر بيانات
-```
+You supply what is actually obtainable:
 
-ونتيجة ذلك تلقائياً:
+* **Published figures** — price, dividend per share, EPS, book value, leverage
+* **Announcements** — headlines, in English or Arabic
 
-- المحركات التي لا تكفيها البيانات **تُعطّل نفسها** وتُعلن السبب في التقرير
-- محرك الكلي (FRED) **يرفض العمل** على رمز عماني: مؤشرات أمريكية كلية لا تقول
-  شيئاً ذا معنى عن سهم محلي
-- بوابة `shortable` **تمنع** أي إشارة بيع: في سوق بلا بيع على المكشوف، الإشارة
-  الهابطة تعني **الخروج أو التجنّب**، لا صفقة بيع
-- بوابة التغطية تمنع إعطاء تصنيف عالٍ اعتماداً على محركين فقط
+And it assesses:
 
-## المسار العملي (بميزانية صفر)
+* **Dividend quality** — yield, cover, payout ratio, direction of travel,
+  payment record, and leverage pressure on the payout
+* **News tone** — a keyword lexicon scoring each announcement, with the matched
+  terms shown so you can disagree with any of them
 
-1. **التراكم اليومي.** شغّل النظام يومياً وسيبني تاريخاً محلياً بمرور الوقت.
-   هذا بطيء لكنه المسار الوحيد المجاني، وقيمته تتراكم.
-2. **استيراد يدوي للتاريخ.** إن حصلت على ملف CSV تاريخي (من وسيطك أو من نشرات
-   MSX)، استورده مرة واحدة لتقفز فوق سنوات الانتظار.
-3. **حساب وسيط عماني.** إن كان لدى وسيطك تصدير بيانات أو API، أخبرني بالاسم
-   وأكتب مزوّداً له — الواجهة جاهزة ولا يحتاج الأمر إلا ملف مزوّد واحد.
+### What it does not do, and why
 
-## كيف تضيف مزوّد MSX
+It produces **no entry, no stop and no target**. Without price history there is
+no trend, no structure and no volatility measure to place them against.
+Offering them anyway would be the dishonest part.
+
+Confidence is also capped at **85%**: two engines reading hand-entered figures
+cannot justify near-certainty.
+
+### On the sentiment lexicon
+
+It matches terms in English and Arabic, normalising Arabic orthography first
+(`الأرباح` and `الارباح` are the same word). Longer phrases win over their
+substrings, so "dividend cut" does not also score the positive term "dividend".
+
+It does **not** understand negation, sarcasm, or context. A headline saying
+"profit did not fall" reads as negative. Every item can be overridden by hand,
+and the override wins. The report states this limitation rather than hiding it.
+
+## If you do get price data
+
+The architecture is ready. Add a provider:
 
 ```python
 # src/analyst/data/providers/msx.py
@@ -53,17 +63,26 @@ class MsxProvider(PriceProvider):
     native_timeframes = (Timeframe.D1,)
 
     def fetch(self, instrument, timeframe, bars) -> pd.DataFrame:
-        # أعد إطاراً بأعمدة open/high/low/close/volume
-        # وفهرس DatetimeIndex بتوقيت UTC
+        # return open/high/low/close/volume with a UTC DatetimeIndex
         ...
 ```
 
-ثم أضفه في `runner.build_service()` ضمن `price_providers`، وفعّل الرمز في
-`watchlist.yaml`. لا شيء آخر يحتاج تعديلاً.
+Register it in `runner.build_service()` and add the symbol to `watchlist.yaml`
+with `market: msx`. Everything else adapts automatically:
 
-## استيراد تاريخ من CSV
+* Engines that lack sufficient data disable themselves and say why
+* The macro engine declines on MSX symbols — US macro says little about a local
+  Omani name
+* The `shortable` gate blocks bearish signals: in a market with no retail short
+  selling, a bearish read means **exit or avoid**, not a short trade
+* The coverage gate prevents a high grade resting on two engines
+
+## Importing history from a file
 
 ```bash
 analyst init-db
-python scripts/import_csv.py BKMB path/to/history.csv --timeframe 1d
+python scripts/import_csv.py BKMB history.csv --timeframe 1d
 ```
+
+Column names are matched loosely in English and Arabic, and can be overridden
+with `--column ts=Date`.

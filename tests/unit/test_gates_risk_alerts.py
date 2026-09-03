@@ -37,7 +37,7 @@ def evaluator(settings):
 def test_not_evaluated_is_never_a_pass(settings, gold_context):
     """The single most important gate property: an unmeasurable condition is not
     a satisfied one."""
-    spec = GateSpec(id="news_blackout", label_ar="أخبار", blocking=True, params={})
+    spec = GateSpec(id="news_blackout", label="أخبار", blocking=True, params={})
     evaluator = GateEvaluator(settings, [spec])
     gold_context.extras.pop("calendar_events", None)
     results = evaluator.evaluate(gold_context, Direction.BULLISH, breakdown(), {}, None)
@@ -46,7 +46,7 @@ def test_not_evaluated_is_never_a_pass(settings, gold_context):
 
 
 def test_confidence_gate_blocks_low_scores(settings, gold_context):
-    spec = GateSpec(id="min_confidence", label_ar="ثقة", params={"min_confidence": 0.6})
+    spec = GateSpec(id="min_confidence", label="ثقة", params={"min_confidence": 0.6})
     evaluator = GateEvaluator(settings, [spec])
     low = evaluator.evaluate(gold_context, Direction.BULLISH, breakdown(0.4), {}, None)[0]
     high = evaluator.evaluate(gold_context, Direction.BULLISH, breakdown(0.75), {}, None)[0]
@@ -55,7 +55,7 @@ def test_confidence_gate_blocks_low_scores(settings, gold_context):
 
 
 def test_mtf_alignment_gate(settings, gold_context):
-    spec = GateSpec(id="mtf_alignment", label_ar="توافق", params={"timeframes": ["1d", "4h"]})
+    spec = GateSpec(id="mtf_alignment", label="توافق", params={"timeframes": ["1d", "4h"]})
     evaluator = GateEvaluator(settings, [spec])
     aligned = EngineResult(engine="trend", direction=Direction.BULLISH, strength=0.8, quality=1.0,
                            metrics={"1d_score": 0.6, "4h_score": 0.5})
@@ -66,7 +66,7 @@ def test_mtf_alignment_gate(settings, gold_context):
 
 
 def test_shortable_gate_blocks_shorts_in_long_only_markets(settings, gold_context):
-    spec = GateSpec(id="shortable", label_ar="قابلية التنفيذ", params={})
+    spec = GateSpec(id="shortable", label="قابلية التنفيذ", params={})
     evaluator = GateEvaluator(settings, [spec])
 
     assert evaluator.evaluate(gold_context, Direction.BEARISH, breakdown(), {}, None)[0].status is GateStatus.PASSED
@@ -79,7 +79,7 @@ def test_shortable_gate_blocks_shorts_in_long_only_markets(settings, gold_contex
 
 
 def test_engine_coverage_gate(settings, gold_context):
-    spec = GateSpec(id="engine_coverage", label_ar="تغطية",
+    spec = GateSpec(id="engine_coverage", label="تغطية",
                     params={"min_active_engines": 3, "min_effective_weight": 0.5})
     evaluator = GateEvaluator(settings, [spec])
     thin = breakdown(engines=1, effective=0.6, available=5.0)
@@ -141,7 +141,7 @@ def test_dedupe_blocks_below_min_grade(settings, pipeline, gold):
     result.grade = Grade.C
     send, reason = should_alert(result, settings.alerts)
     assert send is False
-    assert "دون الحد الأدنى" in reason
+    assert "below the" in reason
 
 
 def test_dedupe_blocks_when_a_gate_failed(settings, pipeline, gold):
@@ -150,10 +150,10 @@ def test_dedupe_blocks_when_a_gate_failed(settings, pipeline, gold):
 
     result = pipeline.analyse(gold)
     result.grade = Grade.A_PLUS
-    result.gates = [GateResult(gate="x", label_ar="بوابة", status=GateStatus.FAILED, blocking=True)]
+    result.gates = [GateResult(gate="x", label="gate", status=GateStatus.FAILED, blocking=True)]
     send, reason = should_alert(result, settings.alerts)
     assert send is False
-    assert "بوابة صلبة" in reason
+    assert "Hard gate" in reason
 
 
 # ----------------------------------------------------------------- outcomes
@@ -221,4 +221,4 @@ def test_stats_refuse_to_report_thin_samples():
     result = compute()
     assert result.sample == 0
     assert result.win_rate is None
-    assert "الحد الأدنى" in result.headline_ar
+    assert "minimum" in result.headline

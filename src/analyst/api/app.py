@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -30,7 +30,7 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
     settings = load_settings()
     init_db()
 
-    app = FastAPI(title="محلل الأسواق", version=code_version(), docs_url="/api/docs")
+    app = FastAPI(title="Market Analyst", version=code_version(), docs_url="/api/docs")
     state: dict[str, Any] = {"service": None, "scheduler": None}
 
     @app.on_event("startup")
@@ -42,7 +42,7 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
             from analyst.scheduler.jobs import start_scheduler
 
             state["scheduler"] = start_scheduler(state["service"])
-            log.info("الجدولة الدورية مفعّلة")
+            log.info("Scheduler enabled")
 
     @app.on_event("shutdown")
     def _shutdown() -> None:
@@ -68,7 +68,7 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
     def instruments() -> list[dict]:
         return [
             {
-                "symbol": i.symbol, "name_ar": i.name_ar, "market": i.market.value,
+                "symbol": i.symbol, "name": i.name, "market": i.market.value,
                 "asset_class": i.asset_class.value, "currency": i.currency,
                 "shortable": i.shortable,
                 "timeframes": [tf.value for tf in i.supported_timeframes],
@@ -88,9 +88,9 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
     def analysis(symbol: str) -> dict:
         rows = history_for(symbol.upper(), limit=1)
         if not rows:
-            raise HTTPException(404, f"لا يوجد تحليل محفوظ للرمز {symbol}")
+            raise HTTPException(404, f"No stored analysis for {symbol}")
         row = rows[0]
-        return {**_summarise(row), "report_ar": row.report_ar, "payload": row.payload}
+        return {**_summarise(row), "report": row.report, "payload": row.payload}
 
     @app.get("/api/history/{symbol}")
     def history(symbol: str, limit: int = Query(200, le=1000)) -> list[dict]:
@@ -114,11 +114,11 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
         try:
             tf = Timeframe(timeframe)
         except ValueError:
-            raise HTTPException(400, f"إطار زمني غير مدعوم: {timeframe}") from None
+            raise HTTPException(400, f"Unsupported timeframe: {timeframe}") from None
 
         service = state.get("service")
         if service is None:
-            raise HTTPException(503, "الخدمة لم تُهيّأ بعد")
+            raise HTTPException(503, "Service is not initialised yet")
 
         frame = service.repository.read(symbol.upper(), tf, bars)
         if frame.empty and tf is Timeframe.H4:
@@ -159,16 +159,109 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
             "avg_mae_r": result.avg_mae_r,
             "by_grade": result.by_grade,
             "is_significant": result.is_significant,
-            "headline_ar": result.headline_ar,
+            "headline": result.headline,
         }
 
     @app.post("/api/run")
-    def run(symbols: list[str] | None = None) -> dict:
+    def run(payload: dict | None = Body(default=None)) -> dict:
+        """Trigger an analysis run. Body is optional: {"symbols": ["XAUUSD"]}.
+
+        Typed as a dict rather than `list[str]` because FastAPI would otherwise
+        require the request body to *be* a JSON array, and an empty object from
+        the dashboard's "Run analysis" button would be rejected as malformed.
+        """
         service = state.get("service")
         if service is None:
-            raise HTTPException(503, "الخدمة لم تُهيّأ بعد")
+            raise HTTPException(503, "Service is not initialised yet")
+        symbols = (payload or {}).get("symbols") or None
         results = service.run_once(symbols=symbols)
         return {"analysed": len(results), "at": now_utc().isoformat()}
+
+    # ------------------------------------------- manual company register
+
+    @app.get("/api/companies")
+    def companies() -> list[dict]:
+        """The manual register: companies with no price feed."""
+        from analyst.manual.service import list_companies
+
+        return list_companies()
+
+    @app.post("/api/companies")
+    def save_company(payload: dict = Body(...)) -> dict:
+        from analyst.manual.service import upsert_company
+
+        symbol = str(payload.get("symbol", "")).strip()
+        if not symbol:
+            raise HTTPException(400, "symbol is required")
+        try:
+            row_id = upsert_company(symbol, payload)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"id": row_id, "symbol": symbol.upper()}
+
+    @app.delete("/api/companies/{symbol}")
+    def remove_company(symbol: str) -> dict:
+        from analyst.manual.service import delete_company
+
+        if not delete_company(symbol):
+            raise HTTPException(404, f"{symbol} is not in the manual register")
+        return {"deleted": symbol.upper()}
+
+    @app.get("/api/companies/{symbol}/assessment")
+    def company_assessment(symbol: str) -> dict:
+        from analyst.manual.service import assess_symbol
+
+        assessment = assess_symbol(symbol)
+        if assessment is None:
+            raise HTTPException(404, f"{symbol} is not in the manual register")
+        return assessment.model_dump(mode="json")
+
+    @app.get("/api/companies/{symbol}/news")
+    def company_news(symbol: str) -> list[dict]:
+        from analyst.manual.service import news_rows
+
+        return news_rows(symbol)
+
+    @app.post("/api/companies/{symbol}/news")
+    def add_company_news(symbol: str, payload: dict = Body(...)) -> dict:
+        from datetime import datetime
+
+        from analyst.manual.service import add_news
+
+        published = payload.get("published_at")
+        when = None
+        if published:
+            try:
+                when = datetime.fromisoformat(str(published).replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise HTTPException(400, f"Invalid published_at: {published}") from exc
+        try:
+            news_id = add_news(
+                symbol,
+                headline=str(payload.get("headline", "")),
+                published_at=when,
+                source=str(payload.get("source", "")),
+                manual_sentiment=payload.get("manual_sentiment"),
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"id": news_id}
+
+    @app.delete("/api/news/{news_id}")
+    def remove_news(news_id: int) -> dict:
+        from analyst.manual.service import delete_news
+
+        if not delete_news(news_id):
+            raise HTTPException(404, f"News item {news_id} not found")
+        return {"deleted": news_id}
+
+    @app.post("/api/sentiment/preview")
+    def sentiment_preview(payload: dict = Body(...)) -> dict:
+        """Score a headline without storing it — powers the live preview."""
+        from analyst.manual.lexicon import score_text
+
+        sentiment, matched = score_text(str(payload.get("headline", "")))
+        return {"sentiment": sentiment, "matched_terms": matched}
 
     # ---------------------------------------------------------- dashboard
 
@@ -181,7 +274,7 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
     else:
         @app.get("/")
         def missing() -> JSONResponse:
-            return JSONResponse({"error": "مجلد web غير موجود"}, status_code=500)
+            return JSONResponse({"error": "web/ directory is missing"}, status_code=500)
 
     return app
 
@@ -192,7 +285,7 @@ def _summarise(row) -> dict:
     gates = payload.get("gates", [])
     return {
         "symbol": row.symbol,
-        "name_ar": row.name_ar,
+        "name": row.name,
         "market": row.market,
         "as_of": to_utc(row.as_of).isoformat(),
         "spot": row.spot,
@@ -215,7 +308,7 @@ def _summarise(row) -> dict:
             if breakdown.get("available_weight") else 0.0
         ),
         "blocking_failures": [
-            {"label_ar": g["label_ar"], "detail_ar": g.get("detail_ar", "")}
+            {"label": g["label"], "detail": g.get("detail", "")}
             for g in gates
             if g.get("blocking") and g.get("status") != "passed"
         ],

@@ -43,29 +43,29 @@ class NewsEngine(Engine):
             evidence.append(
                 Evidence(
                     code="news_blackout",
-                    label_ar="🔴 نافذة حظر أخبار نشطة",
-                    detail_ar=f"{blackout.label_ar} — التوقيت {blackout.when:%Y-%m-%d %H:%M} UTC",
+                    label="🔴 News blackout window is active",
+                    detail=f"{blackout.label} at {blackout.when:%Y-%m-%d %H:%M} UTC",
                     direction=Direction.NEUTRAL,
                 )
             )
-            notes.append("الدخول محظور الآن: خبر عالي الأثر داخل نافذة الحظر")
+            notes.append("Entry is blocked: a high-impact release is inside the blackout window")
         elif upcoming is not None:
             hours = (upcoming.when - ctx.as_of).total_seconds() / 3600.0
             if hours <= 4:
                 factor = self.settings.scoring.news_penalty_high
-                label = "🔴 خبر عالي الأثر خلال أقل من 4 ساعات"
+                label = "🔴 High-impact release within 4 hours"
             elif hours <= 24:
                 factor = self.settings.scoring.news_penalty_medium
-                label = "🟡 خبر عالي الأثر خلال 24 ساعة"
+                label = "🟡 High-impact release within 24 hours"
             else:
                 factor = 1.0
-                label = "🟢 لا أخبار عالية الأثر قريبة"
+                label = "🟢 No high-impact release nearby"
             evidence.append(
                 Evidence(
                     code="news_upcoming",
-                    label_ar=label,
-                    detail_ar=(
-                        f"{upcoming.label_ar} بعد {hours:.1f} ساعة "
+                    label=label,
+                    detail=(
+                        f"{upcoming.label} in {hours:.1f} hours "
                         f"({upcoming.when:%Y-%m-%d %H:%M} UTC)"
                     ),
                     direction=Direction.NEUTRAL,
@@ -77,8 +77,8 @@ class NewsEngine(Engine):
             evidence.append(
                 Evidence(
                     code="news_clear",
-                    label_ar="🟢 الأجندة نظيفة",
-                    detail_ar="لا أحداث عالية الأثر خلال الـ72 ساعة القادمة",
+                    label="🟢 Calendar is clear",
+                    detail="No high-impact events in the next 72 hours",
                     direction=Direction.NEUTRAL,
                 )
             )
@@ -89,8 +89,8 @@ class NewsEngine(Engine):
             evidence.append(
                 Evidence(
                     code=f"event_{event.id}",
-                    label_ar=f"{event.emoji} {event.label_ar}",
-                    detail_ar=f"{event.when:%Y-%m-%d %H:%M} UTC · أثر {event.impact_ar}",
+                    label=f"{event.emoji} {event.label}",
+                    detail=f"{event.when:%Y-%m-%d %H:%M} UTC · {event.impact_label} impact",
                     direction=Direction.NEUTRAL,
                 )
             )
@@ -103,5 +103,5 @@ class NewsEngine(Engine):
             quality=1.0 if ctx.extras.get("calendar_events") is not None else 0.0,
             evidence=evidence,
             metrics=metrics,
-            notes_ar=notes,
+            notes=notes,
         )

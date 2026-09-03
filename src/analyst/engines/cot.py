@@ -35,10 +35,10 @@ class CotEngine(Engine):
 
     def applies_to(self, ctx: MarketContext) -> tuple[bool, str]:
         if ctx.instrument.asset_class not in (AssetClass.FX, AssetClass.METAL, AssetClass.INDEX):
-            return False, "تقرير COT لا يغطي هذه الفئة من الأصول"
+            return False, "The COT report does not cover this asset class"
         frame = ctx.extras.get("cot")
         if frame is None or len(frame) < 26:
-            return False, "بيانات COT غير متاحة أو قصيرة جداً (أقل من 26 أسبوعاً)"
+            return False, "COT data unavailable or too short (under 26 weeks)"
         return True, ""
 
     def _run(self, ctx: MarketContext) -> EngineResult:
@@ -57,11 +57,11 @@ class CotEngine(Engine):
         change_4w = latest - float(net.iloc[-5]) if len(net) >= 5 else 0.0
         denom = float(net.tail(52).abs().mean()) or 1.0
         builder.add(
-            "cot_trend", "اتجاه تموضع المضاربين",
+            "cot_trend", "Speculator positioning trend",
             scale(change_4w / denom, 0.35), 1.0,
-            detail_ar=(
-                f"صافي مراكز المضاربين تغيّر بمقدار {change_4w:+,.0f} عقد خلال 4 أسابيع "
-                f"(الصافي الحالي {latest:+,.0f})"
+            detail=(
+                f"Speculator net position changed by {change_4w:+,.0f} contracts "
+                f"over 4 weeks (now {latest:+,.0f})"
             ),
         )
         metrics["spec_net_change_4w"] = round(change_4w, 2)
@@ -71,18 +71,18 @@ class CotEngine(Engine):
             # far from neutral: fade. Weight rises the further into the tail.
             extremity = (rank - 0.5) * 2.0
             builder.add(
-                "cot_extreme", "تموضع متطرف — إشارة معاكسة",
+                "cot_extreme", "Crowded positioning — contrarian",
                 -clamp(extremity) * 0.9, 1.6,
-                detail_ar=(
-                    f"الصافي عند المئين {rank:.0%} من آخر 3 سنوات — "
-                    f"{'ازدحام في الشراء' if rank >= 0.9 else 'ازدحام في البيع'}، "
-                    "المشتري/البائع الحدّي ينفد"
+                detail=(
+                    f"Net position at the {rank:.0%} percentile of 3 years — "
+                    f"{'crowded long' if rank >= 0.9 else 'crowded short'}; "
+                    "the marginal buyer/seller is running out"
                 ),
             )
         else:
             builder.note(
-                "cot_neutral", "التموضع ضمن نطاقه الطبيعي",
-                f"الصافي عند المئين {rank:.0%} — لا إشارة تطرف",
+                "cot_neutral", "Positioning within its normal range",
+                f"Net position at the {rank:.0%} percentile — no extreme",
             )
 
         # --- commercial hedgers ---------------------------------------
@@ -95,9 +95,9 @@ class CotEngine(Engine):
                 # commercials are the natural hedgers; they lean against the move
                 if comm_rank >= 0.85 or comm_rank <= 0.15:
                     builder.add(
-                        "cot_commercials", "تموضع المتعاملين التجاريين",
+                        "cot_commercials", "Commercial hedger positioning",
                         clamp((comm_rank - 0.5) * 1.6) * 0.6, 0.8,
-                        detail_ar=f"صافي التجاريين عند المئين {comm_rank:.0%} من تاريخه",
+                        detail=f"Commercial net at the {comm_rank:.0%} percentile of its history",
                     )
                 metrics["comm_net_percentile"] = round(comm_rank, 4)
 
@@ -110,6 +110,6 @@ class CotEngine(Engine):
         quality *= min(1.0, len(net) / 104.0)
 
         notes = [
-            f"تقرير COT مؤرَّخ {frame.index[-1]:%Y-%m-%d} — أي بتأخر {age_days} يوماً عن السعر الحالي"
+            f"COT report dated {frame.index[-1]:%Y-%m-%d} — {age_days} days behind current price"
         ]
-        return builder.result(self.id, quality=quality, metrics=metrics, notes_ar=notes)
+        return builder.result(self.id, quality=quality, metrics=metrics, notes=notes)

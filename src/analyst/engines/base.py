@@ -45,13 +45,13 @@ class Engine(ABC):
 
         missing = [tf for tf in self.required_timeframes if tf not in ctx.series]
         if missing:
-            names = "، ".join(tf.arabic for tf in missing)
-            return EngineResult.skipped(self.id, f"فريمات مفقودة: {names}")
+            names = ", ".join(tf.label for tf in missing)
+            return EngineResult.skipped(self.id, f"Missing timeframes: {names}")
 
         try:
             return self._run(ctx)
         except Exception as exc:  # noqa: BLE001 - deliberate isolation boundary
-            return EngineResult.skipped(self.id, f"خطأ داخلي: {type(exc).__name__}: {exc}")
+            return EngineResult.skipped(self.id, f"Internal error: {type(exc).__name__}: {exc}")
 
 
 class ScoreBuilder:
@@ -71,10 +71,10 @@ class ScoreBuilder:
     def add(
         self,
         code: str,
-        label_ar: str,
+        label: str,
         value: float,
         weight: float = 1.0,
-        detail_ar: str = "",
+        detail: str = "",
         record_when_zero: bool = False,
     ) -> None:
         value = max(-1.0, min(1.0, float(value)))
@@ -85,17 +85,17 @@ class ScoreBuilder:
         self.items.append(
             Evidence(
                 code=code,
-                label_ar=label_ar,
-                detail_ar=detail_ar,
+                label=label,
+                detail=detail,
                 direction=Direction.from_score(value, deadband=0.0),
                 contribution=round(value * weight, 4),
             )
         )
 
-    def note(self, code: str, label_ar: str, detail_ar: str = "", direction: Direction = Direction.NEUTRAL) -> None:
+    def note(self, code: str, label: str, detail: str = "", direction: Direction = Direction.NEUTRAL) -> None:
         """Record context that explains the reading without moving the score."""
         self.items.append(
-            Evidence(code=code, label_ar=label_ar, detail_ar=detail_ar,
+            Evidence(code=code, label=label, detail=detail,
                      direction=direction, contribution=0.0)
         )
 
@@ -115,7 +115,7 @@ class ScoreBuilder:
         quality: float,
         deadband: float = 0.10,
         metrics: dict[str, float] | None = None,
-        notes_ar: list[str] | None = None,
+        notes: list[str] | None = None,
     ) -> EngineResult:
         score = self.score
         # Strongest evidence first — the report reads top-down.
@@ -127,7 +127,7 @@ class ScoreBuilder:
             quality=max(0.0, min(1.0, quality)),
             evidence=evidence,
             metrics={k: round(float(v), 4) for k, v in (metrics or {}).items()},
-            notes_ar=notes_ar or [],
+            notes=notes or [],
         )
 
 

@@ -1,12 +1,13 @@
 #!/usr/bin/env python
-"""استيراد تاريخ شموع من ملف CSV إلى قاعدة البيانات.
+"""Import candle history from a CSV file into the database.
 
-الاستخدام الأساسي: بناء تاريخ للسوق العماني أو لأي رمز لا يوفّره مزوّد مجاني.
+Primary use: building history for a market no free provider serves — Muscat
+Stock Exchange, or any symbol you have a broker export for.
 
     python scripts/import_csv.py BKMB history.csv --timeframe 1d
 
-الملف يجب أن يحوي أعمدة التاريخ والسعر. أسماء الأعمدة تُطابَق بمرونة
-(date/time/تاريخ ، open/o/فتح ، …) ويمكن تجاوزها بـ --column.
+Column names are matched loosely (date/time, open/o, close/last, …) in English
+and Arabic, and any of them can be overridden with --column.
 """
 from __future__ import annotations
 
@@ -44,28 +45,29 @@ def resolve_columns(frame: pd.DataFrame, overrides: dict[str, str]) -> dict[str,
         match = next((lowered[n] for n in names if n in lowered), None)
         if match is not None:
             mapping[field] = match
+
     missing = [f for f in ("ts", "open", "high", "low", "close") if f not in mapping]
     if missing:
         raise SystemExit(
-            f"تعذّر التعرّف على الأعمدة: {missing}\n"
-            f"الأعمدة الموجودة: {list(frame.columns)}\n"
-            f"استخدم --column ts=اسم_العمود لتحديدها يدوياً."
+            f"Could not identify these columns: {missing}\n"
+            f"Columns present: {list(frame.columns)}\n"
+            f"Name them explicitly, e.g. --column ts=Date"
         )
     return mapping
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="استيراد شموع من CSV")
-    parser.add_argument("symbol", help="الرمز كما هو في watchlist.yaml")
+    parser = argparse.ArgumentParser(description="Import candles from a CSV file")
+    parser.add_argument("symbol", help="Symbol as it appears in watchlist.yaml")
     parser.add_argument("csv", type=Path)
     parser.add_argument("--timeframe", default="1d", choices=[t.value for t in Timeframe])
     parser.add_argument("--column", action="append", default=[],
-                        help="تحديد عمود يدوياً، مثل: --column ts=Date")
-    parser.add_argument("--dayfirst", action="store_true", help="التواريخ بصيغة يوم/شهر/سنة")
+                        help="Name a column explicitly, e.g. --column ts=Date")
+    parser.add_argument("--dayfirst", action="store_true", help="Dates are DD/MM/YYYY")
     args = parser.parse_args()
 
     if not args.csv.exists():
-        raise SystemExit(f"الملف غير موجود: {args.csv}")
+        raise SystemExit(f"File not found: {args.csv}")
 
     overrides = dict(pair.split("=", 1) for pair in args.column)
     raw = pd.read_csv(args.csv)
@@ -86,16 +88,18 @@ def main() -> None:
     frame = ensure_utc_index(frame.set_index("ts"))
 
     if frame.empty:
-        raise SystemExit("لم يتبقَ أي صف صالح بعد التنظيف — راجع صيغة الملف")
+        raise SystemExit("No valid rows survived cleaning — check the file format")
 
     init_db()
-    repo = CandleRepository([SyntheticProvider()])  # provider unused for a pure write
+    # The provider argument is unused for a pure write, but the repository
+    # requires one; the synthetic provider is the cheapest placeholder.
+    repo = CandleRepository([SyntheticProvider()])
     written = repo.store(args.symbol.upper(), Timeframe(args.timeframe), frame, source="csv")
 
-    print(f"✅ استُورد {written} شمعة للرمز {args.symbol.upper()} على إطار {args.timeframe}")
-    print(f"   المدى: {frame.index[0]:%Y-%m-%d} → {frame.index[-1]:%Y-%m-%d}")
+    print(f"Imported {written} candles for {args.symbol.upper()} on {args.timeframe}")
+    print(f"  Range: {frame.index[0]:%Y-%m-%d} to {frame.index[-1]:%Y-%m-%d}")
     if before != len(frame):
-        print(f"   ⚠️ تم تجاهل {before - len(frame)} صفاً غير صالح")
+        print(f"  Skipped {before - len(frame)} invalid row(s)")
 
 
 if __name__ == "__main__":

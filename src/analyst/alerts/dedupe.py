@@ -22,36 +22,36 @@ _GRADE_RANK = {Grade.NO_TRADE: 0, Grade.C: 1, Grade.B: 2, Grade.A: 3, Grade.A_PL
 def should_alert(result: AnalysisResult, settings: AlertSettings) -> tuple[bool, str]:
     """Return (send?, reason). The reason is logged either way."""
     if not settings.enabled:
-        return False, "التنبيهات معطّلة في الإعدادات"
+        return False, "Alerts are disabled in settings"
 
     minimum = Grade(settings.min_grade)
     if _GRADE_RANK[result.grade] < _GRADE_RANK[minimum]:
-        return False, f"التصنيف {result.grade.value} دون الحد الأدنى {minimum.value}"
+        return False, f"Grade {result.grade.value} is below the {minimum.value} floor"
 
     if result.blocking_failures:
-        return False, f"بوابة صلبة لم تتحقق: {result.blocking_failures[0].label_ar}"
+        return False, f"Hard gate not satisfied: {result.blocking_failures[0].label}"
 
     window = timedelta(minutes=settings.cooldown_minutes)
     previous = last_alert_state(result.symbol, window)
     if previous is None:
-        return True, "أول تنبيه لهذا الرمز داخل نافذة التهدئة"
+        return True, "First alert for this symbol inside the cooldown window"
 
     sent_at, direction, grade_value = previous
     if not settings.require_state_change:
-        return False, f"تنبيه سابق أُرسل في {sent_at:%Y-%m-%d %H:%M} — داخل نافذة التهدئة"
+        return False, f"Previous alert sent {sent_at:%Y-%m-%d %H:%M} — still in cooldown"
 
     if direction != int(result.direction.value):
-        return True, "انعكاس الاتجاه عن التنبيه السابق"
+        return True, "Direction flipped since the previous alert"
 
     try:
         previous_grade = Grade(grade_value)
     except ValueError:
-        return True, "تصنيف التنبيه السابق غير معروف"
+        return True, "Previous alert grade is unrecognised"
 
     if _GRADE_RANK[result.grade] > _GRADE_RANK[previous_grade]:
-        return True, f"ترقية التصنيف من {previous_grade.value} إلى {result.grade.value}"
+        return True, f"Grade upgraded from {previous_grade.value} to {result.grade.value}"
 
     return False, (
-        f"لا تغيّر جوهري منذ تنبيه {sent_at:%Y-%m-%d %H:%M} "
-        f"({previous_grade.value} → {result.grade.value})"
+        f"No material change since {sent_at:%Y-%m-%d %H:%M} "
+        f"({previous_grade.value} -> {result.grade.value})"
     )

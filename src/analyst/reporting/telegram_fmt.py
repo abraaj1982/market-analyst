@@ -1,9 +1,9 @@
 """Telegram message formatting (HTML parse mode).
 
 HTML is used rather than MarkdownV2 because MarkdownV2 requires escaping 18
-characters, several of which (`.`, `-`, `!`) appear constantly in price levels
-and Arabic punctuation. One missed escape means the whole message is rejected by
-the API — a silent alert failure at exactly the wrong moment.
+characters, several of which (`.`, `-`, `!`) appear constantly in price levels.
+One missed escape means the whole message is rejected by the API — a silent
+alert failure at exactly the wrong moment.
 """
 from __future__ import annotations
 
@@ -19,49 +19,50 @@ MAX_LENGTH = 4096
 
 def format_alert(result: AnalysisResult, tz: str = "Asia/Muscat") -> str:
     r = result
-    arrow = "🔺 شراء" if r.direction is Direction.BULLISH else "🔻 بيع"
+    side = "LONG" if r.direction is Direction.BULLISH else "SHORT"
     lines = [
-        f"<b>{escape(r.name_ar)} ({escape(r.symbol)})</b>",
-        f"{arrow} · <b>{r.grade.value}</b> — {r.grade.arabic}",
+        f"<b>{escape(r.name)} ({escape(r.symbol)})</b>",
+        f"{r.direction.emoji} {side} · <b>{r.grade.value}</b> — {r.grade.label}",
         "",
-        f"الثقة: <code>{confidence_bar(r.confidence, 14)}</code> <b>{r.confidence:.0%}</b>",
-        f"السعر: <code>{r.spot:,.5f}</code> · حالة السوق: {r.regime.arabic}",
+        f"Confidence: <code>{confidence_bar(r.confidence, 14)}</code> <b>{r.confidence:.0%}</b>",
+        f"Spot: <code>{r.spot:,.5f}</code> · regime: {r.regime.label}",
     ]
 
     if r.risk is not None:
         lines += [
             "",
-            "<b>خطة الصفقة</b>",
-            f"الدخول: <code>{r.risk.entry:,.5f}</code>",
-            f"الوقف: <code>{r.risk.stop_loss:,.5f}</code>",
-            f"الهدف 1: <code>{r.risk.take_profit_1:,.5f}</code> (2R)",
-            f"الهدف 2: <code>{r.risk.take_profit_2:,.5f}</code> (3.5R)",
+            "<b>Trade plan</b>",
+            f"Entry: <code>{r.risk.entry:,.5f}</code>",
+            f"Stop: <code>{r.risk.stop_loss:,.5f}</code>",
+            f"Target 1: <code>{r.risk.take_profit_1:,.5f}</code> (2R)",
+            f"Target 2: <code>{r.risk.take_profit_2:,.5f}</code> (3.5R)",
         ]
 
     top = [c for c in r.breakdown.contributions if abs(c.contribution) >= 0.05]
     top.sort(key=lambda c: abs(c.contribution), reverse=True)
     if top:
-        lines += ["", "<b>أقوى المحركات</b>"]
+        lines += ["", "<b>Strongest engines</b>"]
         for c in top[:4]:
             lines.append(
-                f"{c.direction.emoji} {escape(c.engine.arabic)} <code>{c.contribution:+.2f}</code>"
+                f"{c.direction.emoji} {escape(c.engine.label)} <code>{c.contribution:+.2f}</code>"
             )
 
     strongest = _strongest_evidence(r)
     if strongest:
-        lines += ["", "<b>أبرز الأدلة</b>"]
+        lines += ["", "<b>Key evidence</b>"]
         for text in strongest[:3]:
             lines.append(f"• {escape(text)}")
 
     warnings = [g for g in r.gates if not g.blocking and g.status.value != "passed"]
     if warnings:
-        lines += ["", "<b>تحذيرات</b>"]
+        lines += ["", "<b>Warnings</b>"]
         for g in warnings[:3]:
-            lines.append(f"⚠️ {escape(g.label_ar)}: {escape(g.detail_ar)}")
+            lines.append(f"⚠️ {escape(g.label)}: {escape(g.detail)}")
 
     lines += [
         "",
-        f"<i>{format_display(r.as_of, tz)} — تحليل آلي لجودة الإعداد، ليس توصية استثمارية.</i>",
+        f"<i>{format_display(r.as_of, tz)} — automated setup-quality read, "
+        f"not investment advice.</i>",
     ]
     return _truncate("\n".join(lines))
 
@@ -69,44 +70,48 @@ def format_alert(result: AnalysisResult, tz: str = "Asia/Muscat") -> str:
 def format_digest(results: list[AnalysisResult], tz: str = "Asia/Muscat") -> str:
     """Daily roundup, ranked by opportunity quality."""
     if not results:
-        return "<b>التقرير اليومي</b>\nلا توجد تحليلات متاحة."
+        return "<b>Daily digest</b>\nNo analyses available."
 
     ranked = sorted(results, key=lambda r: (r.is_actionable, r.confidence), reverse=True)
     stamp = format_display(ranked[0].as_of, tz, "%Y-%m-%d")
-    lines = [f"<b>📊 التقرير اليومي — {stamp}</b>", ""]
+    lines = [f"<b>Daily digest — {stamp}</b>", ""]
 
     actionable = [r for r in ranked if r.is_actionable]
     if actionable:
-        lines.append("<b>فرص مؤهلة</b>")
+        lines.append("<b>Qualified setups</b>")
         for r in actionable:
-            icon = "🔺" if r.direction is Direction.BULLISH else "🔻"
+            entry = f" · entry <code>{r.risk.entry:,.5f}</code>" if r.risk else ""
             lines.append(
-                f"{icon} <b>{escape(r.symbol)}</b> · {r.grade.value} · ثقة {r.confidence:.0%}"
-                + (f" · دخول <code>{r.risk.entry:,.5f}</code>" if r.risk else "")
+                f"{r.direction.emoji} <b>{escape(r.symbol)}</b> · {r.grade.value} "
+                f"· {r.confidence:.0%}{entry}"
             )
         lines.append("")
     else:
-        lines += ["<b>لا توجد فرصة مؤهلة اليوم</b>", "الانتظار قرار صحيح، وليس غياباً للتحليل.", ""]
+        lines += [
+            "<b>No qualified setup today</b>",
+            "Standing aside is a decision, not an absence of analysis.",
+            "",
+        ]
 
-    lines.append("<b>بقية المتابعة</b>")
+    lines.append("<b>Rest of the watchlist</b>")
     for r in ranked:
         if r.is_actionable:
             continue
         blocked = ""
         if r.blocking_failures and r.grade is not Grade.NO_TRADE:
-            blocked = f" ⛔ {escape(r.blocking_failures[0].label_ar)}"
+            blocked = f" [blocked: {escape(r.blocking_failures[0].label)}]"
         lines.append(
             f"• {escape(r.symbol)}: {r.direction.emoji} {r.confidence:.0%} "
             f"({r.grade.value}){blocked}"
         )
 
-    lines += ["", "<i>تحليل آلي لجودة الإعداد. لا يضمن أي نظام نسبة نجاح ثابتة.</i>"]
+    lines += ["", "<i>Automated setup-quality read. No system guarantees a fixed success rate.</i>"]
     return _truncate("\n".join(lines))
 
 
 def _strongest_evidence(result: AnalysisResult) -> list[str]:
     items = [
-        (abs(ev.contribution), f"{ev.label_ar} — {ev.detail_ar}" if ev.detail_ar else ev.label_ar)
+        (abs(ev.contribution), f"{ev.label} — {ev.detail}" if ev.detail else ev.label)
         for engine in result.engines
         if engine.active
         for ev in engine.evidence
@@ -119,4 +124,4 @@ def _strongest_evidence(result: AnalysisResult) -> list[str]:
 def _truncate(text: str) -> str:
     if len(text) <= MAX_LENGTH:
         return text
-    return text[: MAX_LENGTH - 20].rsplit("\n", 1)[0] + "\n<i>… اختُصرت الرسالة</i>"
+    return text[: MAX_LENGTH - 24].rsplit("\n", 1)[0] + "\n<i>… message truncated</i>"

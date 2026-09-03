@@ -49,15 +49,15 @@ class TrendEngine(Engine):
             metrics.update({f"{tf.value}_{k}": v for k, v in tf_metrics.items()})
             builder.add(
                 f"trend_{tf.value}",
-                f"اتجاه {tf.arabic}",
+                f"{tf.label} trend",
                 tf_score,
                 weight,
-                detail_ar=tf_detail,
+                detail=tf_detail,
                 record_when_zero=True,
             )
 
         if not per_tf:
-            return EngineResult.skipped(self.id, "لا يوجد فريم واحد بتاريخ كافٍ (200 شمعة على الأقل)")
+            return EngineResult.skipped(self.id, "No timeframe has enough history (200 bars minimum)")
 
         directions = [np.sign(v) for v in per_tf.values() if abs(v) >= 0.10]
         agreement = (
@@ -71,13 +71,13 @@ class TrendEngine(Engine):
         if directions and agreement == 1.0:
             builder.note(
                 "mtf_full_agreement",
-                "توافق كامل بين كل الفريمات",
-                f"{len(directions)} فريمات تشير لنفس الاتجاه",
+                "All timeframes agree",
+                f"{len(directions)} timeframes point the same way",
                 Direction.from_score(directions[0], 0.0),
             )
         elif agreement < 0.4:
-            builder.note("mtf_conflict", "تعارض بين الفريمات",
-                         "الفريمات لا تتفق — قوة الإشارة مخفّضة")
+            builder.note("mtf_conflict", "Timeframes disagree",
+                         "Signal strength reduced accordingly")
 
         # Quality reflects how much of the intended MTF weight actually had data.
         covered = sum(weights[tf] for tf in per_tf)
@@ -142,8 +142,10 @@ class TrendEngine(Engine):
             "ema20": round(e20, 5), "ema50": round(e50, 5), "ema200": round(e200, 5),
             "atr": round(atr_now, 5),
         }
-        stack = "متتالية صاعدة" if e20 > e50 > e200 else (
-            "متتالية هابطة" if e20 < e50 < e200 else "متشابكة"
+        stack = "stacked bullish" if e20 > e50 > e200 else (
+            "stacked bearish" if e20 < e50 < e200 else "interleaved"
         )
-        detail = f"EMA {stack} · {struct_label} · السعر {'فوق' if price > cloud_top else 'تحت' if price < cloud_bottom else 'داخل'} سحابة إيشيموكو"
+        cloud_side = ("above" if price > cloud_top
+                      else "below" if price < cloud_bottom else "inside")
+        detail = f"EMAs {stack} · {struct_label} · price {cloud_side} the Ichimoku cloud"
         return clamp(score), metrics, detail

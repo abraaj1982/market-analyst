@@ -20,8 +20,8 @@ class Direction(int, Enum):
         return cls.NEUTRAL
 
     @property
-    def arabic(self) -> str:
-        return {-1: "هابط", 0: "محايد", 1: "صاعد"}[self.value]
+    def label(self) -> str:
+        return {-1: "Bearish", 0: "Neutral", 1: "Bullish"}[self.value]
 
     @property
     def emoji(self) -> str:
@@ -47,13 +47,13 @@ class Timeframe(str, Enum):
         return {"15m": "15min", "1h": "1h", "4h": "4h", "1d": "1D", "1wk": "1W-MON"}[self.value]
 
     @property
-    def arabic(self) -> str:
+    def label(self) -> str:
         return {
-            "15m": "15 دقيقة",
-            "1h": "ساعة",
-            "4h": "4 ساعات",
-            "1d": "يومي",
-            "1wk": "أسبوعي",
+            "15m": "15-minute",
+            "1h": "1-hour",
+            "4h": "4-hour",
+            "1d": "Daily",
+            "1wk": "Weekly",
         }[self.value]
 
 
@@ -72,6 +72,9 @@ class Market(str, Enum):
     US = "us"
     MSX = "msx"          # Muscat Stock Exchange (Oman)
     CRYPTO = "crypto"
+    #: Companies with no price feed at all, analysed from manually supplied
+    #: financials and news. See `manual.py`.
+    MANUAL = "manual"
 
 
 class Regime(str, Enum):
@@ -81,12 +84,12 @@ class Regime(str, Enum):
     QUIET = "quiet"
 
     @property
-    def arabic(self) -> str:
+    def label(self) -> str:
         return {
-            "trending": "سوق اتجاهي",
-            "ranging": "سوق عرضي",
-            "high_volatility": "تقلب مرتفع",
-            "quiet": "سوق هادئ",
+            "trending": "Trending",
+            "ranging": "Ranging",
+            "high_volatility": "High volatility",
+            "quiet": "Quiet",
         }[self.value]
 
 
@@ -98,13 +101,13 @@ class Grade(str, Enum):
     NO_TRADE = "NO_TRADE"
 
     @property
-    def arabic(self) -> str:
+    def label(self) -> str:
         return {
-            "A+": "فرصة ممتازة",
-            "A": "فرصة قوية",
-            "B": "فرصة مقبولة",
-            "C": "إشارة ضعيفة",
-            "NO_TRADE": "لا توجد فرصة",
+            "A+": "Excellent setup",
+            "A": "Strong setup",
+            "B": "Acceptable setup",
+            "C": "Weak signal",
+            "NO_TRADE": "No opportunity",
         }[self.value]
 
 
@@ -126,17 +129,22 @@ class EngineId(str, Enum):
     VOLUME_SEASONALITY = "volume_seasonality"
     FUNDAMENTALS = "fundamentals"
     NEWS = "news"
+    #: Manual / local-company engines, used where no price feed exists at all.
+    DIVIDENDS = "dividends"
+    SENTIMENT = "sentiment"
 
     @property
-    def arabic(self) -> str:
+    def label(self) -> str:
         return {
-            "trend": "محرك الاتجاه متعدد الفريمات",
-            "ict_smc": "محرك ICT / السيولة والبنية",
-            "classic_ta": "محرك التحليل الكلاسيكي",
-            "indicators": "محرك المؤشرات الفنية",
-            "macro": "محرك الكلي والترابط",
-            "cot": "محرك تموضع المضاربين",
-            "volume_seasonality": "محرك الحجم والموسمية",
-            "fundamentals": "محرك التحليل الأساسي",
-            "news": "محرك الأخبار والتقويم",
+            "trend": "Multi-timeframe trend",
+            "ict_smc": "ICT / liquidity & structure",
+            "classic_ta": "Classical technical analysis",
+            "indicators": "Technical indicators",
+            "macro": "Macro & intermarket",
+            "cot": "COT positioning",
+            "volume_seasonality": "Volume & seasonality",
+            "fundamentals": "Fundamentals",
+            "news": "News & economic calendar",
+            "dividends": "Dividend quality",
+            "sentiment": "News sentiment",
         }[self.value]

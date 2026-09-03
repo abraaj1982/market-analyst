@@ -1,145 +1,168 @@
-# معادلة درجة الثقة — التوثيق الكامل
+# The confidence score
 
-> هذا المستند هو المرجع الرسمي للرياضيات. أي رقم يعرضه النظام قابل لإعادة
-> حسابه يدوياً من هنا ومن الـ `breakdown` المخزّن مع كل تحليل.
-
----
-
-## المبدأ الحاكم
-
-**لا يولّد أي نموذج لغوي درجة الثقة.** الرقم يخرج من معادلة صريحة، والذكاء
-الاصطناعي غير مستخدم في هذا المشروع إطلاقاً — حتى التقارير العربية قوالب
-حتمية مبنية على الأرقام. السبب: رقم لا يمكن إعادة اشتقاقه لا يمكن تدقيقه، ولا
-يمكن معايرته لاحقاً من النتائج الفعلية.
+> This is the authoritative reference for the maths. Every number the system
+> prints can be recomputed by hand from this page and the `breakdown` object
+> stored alongside each analysis.
 
 ---
 
-## الخطوات الست
+## The governing principle
 
-### 1) الوزن الفعّال لكل محرك
+**No language model produces the confidence score.** There is no AI anywhere in
+this project — even the written reports are deterministic templates over the
+computed values. The reason is not purity: a number that cannot be re-derived
+cannot be audited, and cannot be recalibrated later against real outcomes.
+
+---
+
+## The seven steps
+
+### 1) Effective weight per engine
 
 ```
-w_eff(i) = w_base(i) × regime_mult(i) × asset_mult(i) × quality(i)
+w_eff(i) = base_weight × regime_multiplier × asset_class_multiplier × engine_quality
 ```
 
-| العامل | من أين | لماذا |
+| Factor | Source | Why |
 |---|---|---|
-| `w_base` | `settings.yaml → weights.base` | الأهمية الافتراضية للمدرسة التحليلية |
-| `regime_mult` | `weights.regime_multipliers` | المؤشرات المتذبذبة تكذب في الترند، والاتجاه يكذب في العرضي |
-| `asset_mult` | `weights.asset_class_multipliers` | الأساسيات = صفر للذهب والعملات، وCOT = صفر للأسهم |
-| `quality` | المحرك نفسه | ثقة المحرك في مدخلاته هو |
+| `base_weight` | `settings.yaml → weights.base` | Default importance of that school of analysis |
+| `regime_multiplier` | `weights.regime_multipliers` | Oscillators mislead in trends; trend-following misleads in ranges |
+| `asset_class_multiplier` | `weights.asset_class_multipliers` | Fundamentals are zero for metals; COT is zero for single equities |
+| `engine_quality` | the engine itself | How much it trusts its own inputs |
 
-**قرار تصميمي مهم:** الجودة تضرب في **الوزن** لا في **الدرجة**. محرك لا يثق في
-بياناته يفقد **تأثيره**، ولا يُدفع نحو الحياد. الخلط بين الأمرين يجعل محركاً
-نصف أعمى يخفّف قناعة محرك واثق بدل أن يصمت.
+**A design decision worth stating:** quality multiplies the **weight**, not the
+**score**. An engine that distrusts its data loses *influence*; it is not pushed
+toward neutral. Conflating those two lets a half-blind engine dilute a confident
+one rather than simply stepping back.
 
-### 2) الإجماع الموقّع
-
-```
-S = Σ( w_eff(i) × dir(i) × strength(i) ) / Σ w_eff(i)          ∈ [-1, +1]
-```
-
-### 3) التشتت (قياس التعارض)
+### 2) Signed consensus
 
 ```
-D = Σ( w_eff(i) × (signed(i) − S)² ) / Σ w_eff(i)               ∈ [0, 1]
+S = Σ( w_eff(i) × direction(i) × strength(i) ) / Σ w_eff(i)        ∈ [-1, +1]
 ```
 
-`D` مُطبّع ذاتياً: يبلغ 1 فقط حين ينقسم الوزن بالتساوي بين +1 و−1.
-
-### 4) التماسك
+### 3) Dispersion — the measure of disagreement
 
 ```
-C = 1 − λ·D                        (λ = dispersion_lambda، افتراضياً 0.55)
+D = Σ( w_eff(i) × (signed(i) − S)² ) / Σ w_eff(i)                  ∈ [0, 1]
 ```
 
-### 5) المعايرة — الخطوة التي يغفلها معظم الأنظمة
+`D` is self-normalising: it reaches 1 only when weight is split evenly between
++1 and −1.
 
-المتوسط المرجّح **مضغوط بنيوياً نحو الصفر**، لأن معظم الإشارات الفرعية هادئة
-معظم الوقت. قياس تجريبي على 90 سيناريو أعطى:
+### 4) Coherence
 
-| نوع السوق | وسيط \|S\| | أقصى \|S\| |
+```
+C = 1 − λ·D                        (λ = dispersion_lambda, default 0.55)
+```
+
+### 5) Calibration — the step most systems skip
+
+A weighted mean is **structurally compressed toward zero**, because most
+sub-signals are quiet most of the time. Measured across 90 scenarios:
+
+| Market type | median \|S\| | max \|S\| |
 |---|---|---|
-| اتجاه نظيف متعدد الفريمات | **0.460** | 0.525 |
-| عشوائي واقعي | **0.165** | 0.516 |
-| عرضي مشوّش | **0.069** | 0.369 |
+| Clean multi-timeframe trend | **0.460** | 0.525 |
+| Realistic random walk | **0.165** | 0.516 |
+| Choppy range | **0.069** | 0.369 |
 
-قراءة `|S|` كنسبة مئوية مباشرة تجعل تصنيف A+ **غير قابل للبلوغ** وتُفرغ المقياس
-من معناه. لذلك يمر `|S|` عبر دالة لوجستية رتيبة (Platt scaling) مُطبّعة:
+Reading `|S|` directly as a percentage would put A+ **out of reach** and make the
+grade scale decorative. So `|S|` passes through a normalised logistic (Platt
+scaling):
 
 ```
         σ(k(x − x₀)) − σ(−k·x₀)
 L(x) = ─────────────────────────         σ(z) = 1/(1+e^−z)
         σ(k(1 − x₀)) − σ(−k·x₀)
 
-L(0) = 0   ·   L(1) = 1   ·   رتيبة تماماً
+L(0) = 0   ·   L(1) = 1   ·   strictly increasing
 ```
 
-بالقيم الحالية (`x₀ = 0.33`، `k = 9.5`):
+With the current values (`x₀ = 0.33`, `k = 9.5`):
 
 | \|S\| | 0.10 | 0.17 | 0.30 | 0.46 | 0.53 | 0.70 |
 |---|---|---|---|---|---|---|
 | **K** | 0.06 | 0.14 | 0.41 | **0.77** | 0.85 | 0.97 |
 
-المعايرة تغيّر **المقياس** ولا تغيّر **الترتيب**: إجماع أقوى يعطي دائماً ثقة أعلى.
+Calibration changes the **scale**, never the **ordering**: a stronger consensus
+always yields a higher confidence.
 
-> ⚠️ **`midpoint` و`steepness` تقديران أوليان مبنيان على بيانات تركيبية.**
-> يجب إعادة ضبطهما من نتائج التتبّع الأمامي الفعلية (`analyst stats`) بعد
-> تراكم 100+ صفقة محسومة. هذا ليس تفصيلاً — هو الفرق بين نظام يتعلّم ونظام
-> يكرر افتراضات مؤلفه.
+> ⚠️ **`midpoint` and `steepness` are priors fitted on synthetic data.**
+> Re-fit them from real forward-test outcomes with `analyst calibrate` once
+> enough signals have resolved. This is not a detail — it is the difference
+> between a system that learns and one that keeps repeating its author's
+> assumptions.
 
-### 6) الثقة النهائية
+### 6) Final confidence
 
 ```
 confidence = K × C × news_factor × data_quality × regime_fit
 ```
 
-كل عامل بعد `K` مضاعف في المجال (0, 1]. **لا شيء في المعادلة يستطيع رفع الثقة
-فوق الإجماع المعاير** — النظام قادر على تخفيض تقديره لنفسه فقط. هذا اللاتماثل
-مقصود.
+Every factor after `K` is a multiplier in (0, 1]. **Nothing in this formula can
+raise confidence above the calibrated consensus** — the system can only ever
+talk itself *down*. That asymmetry is deliberate.
 
----
-
-## التصنيف والحدود
+### 7) Grade
 
 ```
-A+  ≥ 0.80        A ≥ 0.70        B ≥ 0.60        C ≥ 0.45        وإلا NO_TRADE
+A+ ≥ 0.80      A ≥ 0.70      B ≥ 0.60      C ≥ 0.45      else NO_TRADE
 ```
 
-وقبل أي تصنيف، **شرطا التغطية**:
+And before any grade at all, **two coverage conditions**:
 
 ```
 active_engines ≥ 3            AND            coverage_ratio ≥ 50%
 coverage_ratio = Σ w_eff / Σ w_adjusted
 ```
 
-هذان الشرطان يمنعان نمط الفشل الأخطر: محرك واحد واثق بينما صمتت البقية، فيخرج
-الناتج بثوب A+. النسبة أهم من الوزن المطلق لأن الوزن المتاح يختلف جذرياً بين
-معدن وسهم.
+These prevent the worst failure mode: one confident engine while eight stood
+aside, arriving dressed as an A+. The ratio matters more than an absolute weight
+floor, because available weight differs enormously between a metal and an
+equity.
 
 ---
 
-## البوابات الصلبة — منفصلة تماماً عن الرقم
+## Hard gates — entirely separate from the number
 
-البوابة ليست وزناً. ثقة 95% مع خبر عالي الأثر بعد 40 دقيقة ليست فرصة 95%، بل
-ليست فرصة إطلاقاً. ترميز ذلك كوزن سالب صغير يسمح لإجماع قوي بأن **يشتري** طريقه
-عبر البوابة — وهذا بالضبط ما يجب ألا يحدث.
+A gate is not a weight. A 95% confidence read with a high-impact release in 40
+minutes is not a 95% opportunity; it is not an opportunity at all. Encoding that
+as a small negative weight would let a strong enough consensus **buy its way
+past it**, which is precisely what must not happen.
 
-**حالة `NOT_EVALUATED` ليست نجاحاً.** إذا تعذّر تحميل التقويم الاقتصادي، فبوابة
-الأخبار لم تُجتَز — هي فقط لم تعمل، والتقرير يقول ذلك صراحة.
+**`NOT_EVALUATED` is not a pass.** If the economic calendar failed to load, the
+news gate was not cleared — it simply did not run, and the report says so.
 
-البوابات معرّفة في `config/gates.yaml`، والمانعة منها تُنزّل أي إشارة من A/A+
-إلى B تلقائياً في `pipeline.py`.
+Gates live in `config/gates.yaml`. A failed blocking gate automatically
+downgrades any A/A+ signal to B in `pipeline.py`, so nothing downstream has to
+remember to re-check.
 
 ---
 
-## إعادة المعايرة من الواقع (المرحلة القادمة)
+## The manual company path
 
-بعد تراكم عيّنة كافية عبر `analyst stats`:
+Companies with no price feed (see `MSX.md`) use the same weighted-mean maths with
+two differences, both stated in the report:
 
-1. **معايرة الثقة**: هل الإشارات في شريحة 70–80% ثقة تحققت فعلاً بنسبة قريبة من
-   ذلك؟ ارسم منحنى المعايرة (reliability diagram) واضبط `midpoint`/`steepness`.
-2. **معايرة الأوزان**: احسب لكل محرك مساهمته الفعلية في التنبؤ (Brier score أو
-   معامل معلومات). ارفع وزن ما يضيف، واخفض ما لا يضيف.
-3. **لا تُؤتمت خطوة 2.** الضبط التلقائي المستمر على عيّنة صغيرة هو overfitting
-   بغلاف جميل. النظام **يقترح** والإنسان **يقرر**.
+* **No regime or asset-class multipliers.** They have no meaning without price
+  history.
+* **A hard ceiling of 85% confidence.** Two engines reading hand-entered figures
+  cannot justify near-certainty regardless of how strongly they agree. Without
+  the cap the maths happily returns 97%, which would be the most misleading
+  number in the product.
+
+---
+
+## Recalibrating from reality
+
+Once signals have accumulated:
+
+1. **Confidence calibration.** Did roughly 70% of the setups in the 70–80% band
+   actually reach target? `analyst calibrate` builds that reliability table and
+   proposes a midpoint shift when the gap is both large and statistically real.
+2. **Weight calibration.** Score each engine's contribution to predictive
+   accuracy (Brier score, information coefficient). Raise what adds, lower what
+   does not.
+3. **Do not automate step 2.** Continuous auto-fitting on a small sample is
+   overfitting in a nicer wrapper. The system *proposes*; a person *decides*.

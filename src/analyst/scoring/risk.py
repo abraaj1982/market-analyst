@@ -58,7 +58,7 @@ def build_plan(
         risk_reward=round(settings.target_r_multiple_1, 3),
         stop_distance=round(distance, 8),
         atr=round(atr_now, 8),
-        basis_ar=basis,
+        basis=basis,
         position_size_hint=_size_hint(distance, entry, settings),
     )
 
@@ -85,13 +85,14 @@ def _stop_level(
         structural = (max(lows) - buffer) if lows else None
         volatility = entry - atr_floor
         if structural is None:
-            return volatility, f"وقف على أساس التقلب: {settings.atr_stop_multiplier}× ATR تحت الدخول"
+            return volatility, f"Volatility stop: {settings.atr_stop_multiplier}x ATR below entry"
         # never tighter than the ATR floor...
         stop = min(structural, volatility)
         basis = (
-            f"وقف خلف آخر قاع بنيوي عند {max(lows):.5f} مع هامش {settings.structure_stop_buffer_atr}× ATR"
+            f"Stop behind the last structural low at {max(lows):.5f}, "
+            f"plus a {settings.structure_stop_buffer_atr}x ATR buffer"
             if stop == structural
-            else f"وقف على أساس التقلب ({settings.atr_stop_multiplier}× ATR) لأن القاع البنيوي قريب جداً"
+            else f"Volatility stop ({settings.atr_stop_multiplier}x ATR) — the structural low is too close"
         )
         # ...and never wider than the ceiling. A stop 4+ ATR away means the real
         # invalidation level is too far for the trade to have workable geometry;
@@ -99,8 +100,8 @@ def _stop_level(
         if entry - stop > atr_ceiling:
             stop = entry - atr_ceiling
             basis = (
-                f"⚠️ مستوى الإبطال البنيوي أبعد من {settings.max_stop_atr}× ATR — "
-                f"تم قصّ الوقف عند الحد الأقصى، والوقف هنا ليس عند الإبطال الحقيقي"
+                f"⚠️ Structural invalidation sits beyond {settings.max_stop_atr}x ATR — "
+                "the stop was capped, so it is NOT at the true invalidation level"
             )
         return stop, basis
 
@@ -108,18 +109,19 @@ def _stop_level(
     structural = (min(highs) + buffer) if highs else None
     volatility = entry + atr_floor
     if structural is None:
-        return volatility, f"وقف على أساس التقلب: {settings.atr_stop_multiplier}× ATR فوق الدخول"
+        return volatility, f"Volatility stop: {settings.atr_stop_multiplier}x ATR above entry"
     stop = max(structural, volatility)
     basis = (
-        f"وقف خلف آخر قمة بنيوية عند {min(highs):.5f} مع هامش {settings.structure_stop_buffer_atr}× ATR"
+        f"Stop behind the last structural high at {min(highs):.5f}, "
+        f"plus a {settings.structure_stop_buffer_atr}x ATR buffer"
         if stop == structural
-        else f"وقف على أساس التقلب ({settings.atr_stop_multiplier}× ATR) لأن القمة البنيوية قريبة جداً"
+        else f"Volatility stop ({settings.atr_stop_multiplier}x ATR) — the structural high is too close"
     )
     if stop - entry > atr_ceiling:
         stop = entry + atr_ceiling
         basis = (
-            f"⚠️ مستوى الإبطال البنيوي أبعد من {settings.max_stop_atr}× ATR — "
-            f"تم قصّ الوقف عند الحد الأقصى، والوقف هنا ليس عند الإبطال الحقيقي"
+            f"⚠️ Structural invalidation sits beyond {settings.max_stop_atr}x ATR — "
+            "the stop was capped, so it is NOT at the true invalidation level"
         )
     return stop, basis
 
@@ -135,7 +137,7 @@ def _size_hint(distance: float, entry: float, settings: RiskSettings) -> str:
     pct_move = distance / entry * 100.0
     units_per_1pct = settings.account_risk_percent / pct_move if pct_move > 0 else 0.0
     return (
-        f"مخاطرة {settings.account_risk_percent:.1f}% من رأس المال لكل صفقة · "
-        f"مسافة الوقف {pct_move:.2f}% من السعر · "
-        f"الحجم ≈ {units_per_1pct:.2f}× رأس المال (اضبطه حسب رافعة وسيطك)"
+        f"Risk {settings.account_risk_percent:.1f}% of equity per trade · "
+        f"stop distance {pct_move:.2f}% of price · "
+        f"size = {units_per_1pct:.2f}x equity (adjust for your broker's leverage)"
     )

@@ -1,17 +1,18 @@
 # ============================================================================
-#  إعدادات محلل الأسواق — كل رقم هنا قابل للتعديل بدون لمس الكود
-#  عدّل، احفظ، أعد التشغيل. النسخة تُخزَّن مع كل تحليل للتدقيق لاحقاً.
+#  Market Analyst — every number here is editable without touching code.
+#  Edit, save, restart. The version below is stamped onto every stored analysis
+#  so months of accumulated statistics stay attributable.
 # ============================================================================
-version: "1.0.0"
+version: "1.1.0"
 
 profile: swing            # swing | intraday | position
 
 timezone:
-  storage: UTC            # التخزين والحساب دائماً UTC — لا تغيّره
-  display: Asia/Muscat    # العرض في اللوحة والتقارير
+  storage: UTC            # storage and computation are always UTC - do not change
+  display: Asia/Muscat    # used for the dashboard and reports
 
 # ---------------------------------------------------------------------------
-# الفريمات المستخدمة لكل ملف تعريف
+# Timeframes per profile
 # ---------------------------------------------------------------------------
 profiles:
   swing:
@@ -28,8 +29,8 @@ profiles:
     analysis_interval_minutes: 240
 
 # ---------------------------------------------------------------------------
-# أوزان المحركات — الأساس. تُعدَّل حسب نظام السوق أدناه.
-# لا يُشترط أن يكون المجموع 1: التطبيع يتم رياضياً في المجمّع.
+# Engine weights. These need not sum to 1: normalisation happens in the
+# aggregator, so a weight is a statement of relative importance only.
 # ---------------------------------------------------------------------------
 weights:
   base:
@@ -41,19 +42,21 @@ weights:
     cot:                0.45
     volume_seasonality: 0.40
     fundamentals:       0.75
-    news:               0.00   # الأخبار بوابة ومُعدِّل، لا تصوّت باتجاه
+    news:               0.00   # news is a gate and a modifier, never a voter
+    dividends:          0.90   # manual companies only
+    sentiment:          0.70   # manual companies only
 
-  # مضاعفات حسب نظام السوق (تُضرب في الوزن الأساس)
+  # Multipliers applied on top of the base weight, per market regime.
   regime_multipliers:
     trending:
       trend: 1.25
       ict_smc: 1.10
       classic_ta: 0.85
-      indicators: 0.75      # المؤشرات المتذبذبة تعطي إشارات معاكسة كاذبة في الترند
+      indicators: 0.75      # oscillators give false counter-signals in a trend
     ranging:
       trend: 0.60
       ict_smc: 0.95
-      classic_ta: 1.20      # الدعم/المقاومة يتفوق في العرضي
+      classic_ta: 1.20      # levels dominate in a range
       indicators: 1.25
     high_volatility:
       trend: 0.85
@@ -67,7 +70,8 @@ weights:
       classic_ta: 1.10
       indicators: 1.05
 
-  # مضاعفات حسب فئة الأصل (الأساسيات لا معنى لها في الفوركس مثلاً)
+  # Multipliers per asset class. Fundamentals mean nothing for FX; COT means
+  # nothing for a single equity.
   asset_class_multipliers:
     fx:     { fundamentals: 0.0, volume_seasonality: 0.7, macro: 1.25, cot: 1.15 }
     metal:  { fundamentals: 0.0, volume_seasonality: 0.8, macro: 1.35, cot: 1.25 }
@@ -76,39 +80,42 @@ weights:
     crypto: { fundamentals: 0.0, cot: 0.0, macro: 0.8 }
 
 # ---------------------------------------------------------------------------
-# معادلة درجة الثقة
+# Confidence scoring
 # ---------------------------------------------------------------------------
 scoring:
-  direction_deadband: 0.10     # أقل من هذا = محايد
-  dispersion_lambda: 0.55      # شدة عقوبة تعارض المحركات
-  # التغطية: كم من الوزن المتاح أصلاً لهذا الأصل شارك فعلاً في القرار؟
-  # حد مطلق للوزن لا يكفي — محرك واحد قوي قد يتجاوزه ويعطي A+ زوراً.
-  min_coverage_ratio: 0.50     # 50% من الوزن المتاح على الأقل
-  min_active_engines: 3        # وثلاثة محركات فعّالة على الأقل
-  news_penalty_high: 0.35      # مُعدِّل الثقة عند خبر عالي الأثر قريب
+  direction_deadband: 0.10     # below this magnitude the read is neutral
+  dispersion_lambda: 0.55      # how hard engine disagreement is penalised
+  news_penalty_high: 0.35      # confidence multiplier near a high-impact release
   news_penalty_medium: 0.75
-  # ── معايرة الإجماع → ثقة ────────────────────────────────────────────
-  # الإجماع الخام S هو متوسط مرجّح، لذا يميل بنيوياً نحو الصفر: حتى إعداد
-  # ممتاز نادراً ما يتجاوز |S| = 0.75. تحويل |S| مباشرة إلى نسبة مئوية يجعل
-  # تصنيف A+ غير قابل للبلوغ ويُفرغ المقياس من معناه.
-  # لذلك نمرّره عبر دالة لوجستية رتيبة (Platt scaling) مُطبّعة بحيث L(0)=0 و L(1)=1.
-  #   midpoint = قيمة |S| التي تُعطي ثقة 50%
-  #   steepness = حدّة التمييز بين الإعداد الجيد والممتاز
+
+  # Coverage: how much of the weight actually available for this asset took part.
+  # An absolute weight floor is not enough - one strong engine can clear it and
+  # produce a false A+.
+  min_coverage_ratio: 0.50     # at least 50% of available weight
+  min_active_engines: 3        # and at least three active engines
+
+  # -- Consensus to confidence calibration --------------------------------
+  # Raw consensus S is a weighted mean, so it is structurally compressed toward
+  # zero: even an excellent setup rarely exceeds |S| = 0.75. Reading |S| directly
+  # as a percentage would put A+ out of reach and make the grade scale
+  # decorative. So |S| passes through a normalised logistic (Platt scaling)
+  # with L(0)=0 and L(1)=1.
   #
-  # القيم أدناه مقيسة تجريبياً لا مُخمّنة (90 سيناريو، راجع docs/SCORING.md):
-  #   اتجاه متعدد الفريمات نظيف → |S| وسيط 0.46 (أقصى 0.53)
-  #   سوق عرضي مشوّش            → |S| وسيط 0.07
-  #   عشوائي واقعي              → |S| وسيط 0.17
-  # وسيط 0.33 يضع الاتجاه النظيف عند ثقة ~72% (تصنيف A) والعشوائي عند ~13%.
+  # The values below were MEASURED, not guessed (90 scenarios, see docs/SCORING.md):
+  #   clean multi-timeframe trend  -> median |S| 0.46 (max 0.53)
+  #   choppy range                 -> median |S| 0.07
+  #   realistic random walk        -> median |S| 0.17
+  # A midpoint of 0.33 puts a clean trend near 72% confidence (grade A) and a
+  # random walk near 13%.
   #
-  # ⚠️ هذان الرقمان تقديران أوليان (priors) مبنيان على بيانات تركيبية — يجب
-  #    إعادة معايرتهما من نتائج التتبّع الأمامي الفعلية بعد تراكم عيّنة كافية.
+  # WARNING: these are priors fitted on synthetic data. Re-fit them from real
+  # forward-test outcomes once enough signals have resolved: `analyst calibrate`.
   calibration:
     midpoint: 0.33
     steepness: 9.5
 
-  # مُعدِّل ملاءمة نظام السوق: هل هذا السوق أصلاً قابل للتداول بثقة؟
-  # يُخفّض الثقة فقط، ولا يرفعها أبداً.
+  # Regime fit: is this environment tradeable with confidence at all?
+  # Reduces confidence only, never raises it.
   regime_fit:
     trending: 1.00
     ranging: 0.92
@@ -122,7 +129,7 @@ scoring:
     C: 0.45
 
 # ---------------------------------------------------------------------------
-# إدارة المخاطر
+# Risk management
 # ---------------------------------------------------------------------------
 risk:
   atr_period: 14
@@ -131,35 +138,36 @@ risk:
   target_r_multiple_1: 2.0
   target_r_multiple_2: 3.5
   account_risk_percent: 1.0
-  structure_stop_buffer_atr: 0.35   # مسافة أمان خلف السوينغ بوحدات ATR
-  # أقصى مسافة مقبولة للوقف. إذا كان مستوى الإبطال البنيوي أبعد من هذا،
-  # فهندسة الصفقة سيئة أصلاً — يُقصّ الوقف ويُعلَن ذلك صراحة في التقرير.
+  structure_stop_buffer_atr: 0.35   # buffer behind the swing, in ATR units
+  # Furthest a stop may sit. If structural invalidation is beyond this, the
+  # trade geometry is poor: the stop is capped and the report says so openly.
   max_stop_atr: 3.0
-  # لا تعرض مستويات دعم/مقاومة أبعد من هذا (ضجيج لا معنى له)
+  # Support and resistance further away than this are historical artefacts, not
+  # levels; they are not displayed or scored.
   max_level_distance_atr: 10.0
 
 # ---------------------------------------------------------------------------
-# جودة البيانات
+# Data quality
 # ---------------------------------------------------------------------------
 data_quality:
-  max_staleness_bars: 3        # كم شمعة يُسمح بتأخر آخر شمعة مغلقة
-  max_gap_ratio: 0.08          # نسبة الشموع المفقودة المسموحة
+  max_staleness_bars: 3        # how late the newest closed bar may be
+  max_gap_ratio: 0.08          # tolerated share of missing bars
   min_bars_required: 120
-  spike_atr_multiple: 8.0      # مدى شمعة أكبر من هذا = شمعة مشبوهة
+  spike_atr_multiple: 8.0      # a bar range beyond this is a suspected bad tick
 
 # ---------------------------------------------------------------------------
-# التنبيهات
+# Alerts
 # ---------------------------------------------------------------------------
 alerts:
   enabled: true
-  min_grade: "A"               # لا تنبيه لما دون هذا
-  cooldown_minutes: 240        # لا تكرر نفس الرمز/الاتجاه قبل هذه المدة
-  require_state_change: true   # نبّه فقط عند تغيّر الاتجاه أو الترقية لدرجة أعلى
-  daily_digest_hour_local: 7   # ساعة التقرير اليومي المجمّع بتوقيت العرض
+  min_grade: "A"               # nothing below this is ever alerted
+  cooldown_minutes: 240        # never repeat the same symbol inside this window
+  require_state_change: true   # only speak again on a flip or an upgrade
+  daily_digest_hour_local: 7   # local hour for the daily digest
 
 # ---------------------------------------------------------------------------
-# التخزين
+# Storage
 # ---------------------------------------------------------------------------
 storage:
   database_url: "sqlite:///data/analyst.db"
-  candle_retention_days: 1825  # 5 سنوات
+  candle_retention_days: 1825  # 5 years of intraday; daily bars are kept forever

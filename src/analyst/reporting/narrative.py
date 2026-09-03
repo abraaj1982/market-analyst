@@ -1,4 +1,4 @@
-"""Arabic report generation — deterministic templates over the computed numbers.
+"""Report generation — deterministic templates over the computed numbers.
 
 There is no language model anywhere in this file, and that is a design decision
 rather than a limitation. Every sentence is derived from a value that already
@@ -27,15 +27,16 @@ def confidence_bar(value: float, width: int = 20) -> str:
 
 
 def build_report(result: AnalysisResult, tz: str = "Asia/Muscat") -> str:
-    """Full Arabic analysis report as plain text with light markdown."""
-    parts: list[str] = []
-    parts.append(_header(result, tz))
-    parts.append(_verdict(result))
-    parts.append(_gates_section(result))
-    parts.append(_risk_section(result))
-    parts.append(_engines_section(result))
-    parts.append(_math_section(result))
-    parts.append(_caveats(result))
+    """Full analysis report as plain text with light markdown."""
+    parts = [
+        _header(result, tz),
+        _verdict(result),
+        _gates_section(result),
+        _risk_section(result),
+        _engines_section(result),
+        _math_section(result),
+        _caveats(result),
+    ]
     return "\n".join(p for p in parts if p).strip()
 
 
@@ -43,55 +44,54 @@ def build_report(result: AnalysisResult, tz: str = "Asia/Muscat") -> str:
 
 
 def _header(r: AnalysisResult, tz: str) -> str:
+    price = f"{r.spot:,.5f}".rstrip("0").rstrip(".")
     return (
-        f"{'═' * 58}\n"
-        f"  {r.name_ar} ({r.symbol})\n"
-        f"  {format_display(r.as_of, tz)} — بتوقيت {tz.split('/')[-1]}\n"
-        f"  السعر الحالي: {r.spot:,.5f}".rstrip("0").rstrip(".") + "\n"
-        f"{'═' * 58}"
+        f"{'=' * 62}\n"
+        f"  {r.name} ({r.symbol})\n"
+        f"  {format_display(r.as_of, tz)} — {tz}\n"
+        f"  Spot: {price}\n"
+        f"{'=' * 62}"
     )
 
 
 def _verdict(r: AnalysisResult) -> str:
     if r.direction is Direction.NEUTRAL or r.grade is Grade.NO_TRADE:
-        headline = "⚪ لا توجد فرصة — الانتظار هو القرار الصحيح"
+        headline = "NO SETUP — standing aside is the correct decision"
     else:
-        arrow = "🔺 تحيّز شرائي" if r.direction is Direction.BULLISH else "🔻 تحيّز بيعي"
-        headline = f"{arrow} — {r.grade.arabic} ({r.grade.value})"
+        bias = "LONG BIAS" if r.direction is Direction.BULLISH else "SHORT BIAS"
+        headline = f"{r.direction.emoji} {bias} — {r.grade.label} ({r.grade.value})"
 
     lines = [
-        "\n## الخلاصة",
+        "\n## Verdict",
         f"**{headline}**",
         "",
-        f"درجة الثقة: `{confidence_bar(r.confidence)}` **{r.confidence:.0%}**",
-        f"حالة السوق: {r.regime.arabic}",
+        f"Confidence: `{confidence_bar(r.confidence)}` **{r.confidence:.0%}**",
+        f"Market regime: {r.regime.label}",
     ]
 
     blockers = r.blocking_failures
     if blockers:
-        lines.append("")
-        lines.append("**⛔ الإشارة موقوفة بسبب بوابات صلبة لم تتحقق:**")
+        lines += ["", "**BLOCKED — hard gates not satisfied:**"]
         for gate in blockers:
-            mark = "لم تُقيَّم" if gate.status is GateStatus.NOT_EVALUATED else "لم تتحقق"
-            lines.append(f"   • {gate.label_ar} — {mark}: {gate.detail_ar}")
-        lines.append("")
-        lines.append(
-            "> بوابة واحدة ساقطة تكفي لإلغاء الصفقة مهما ارتفعت درجة الثقة. "
-            "هذا مقصود في التصميم."
-        )
+            state = "not evaluated" if gate.status is GateStatus.NOT_EVALUATED else "failed"
+            lines.append(f"   - {gate.label} ({state}): {gate.detail}")
+        lines += [
+            "",
+            "> One failed gate cancels the trade no matter how high the confidence. "
+            "That is deliberate.",
+        ]
     elif r.is_actionable:
-        lines.append("")
-        lines.append("✅ كل البوابات الصلبة متحققة — الإعداد صالح للمتابعة.")
+        lines += ["", "All hard gates satisfied — the setup is valid to act on."]
     return "\n".join(lines)
 
 
 def _gates_section(r: AnalysisResult) -> str:
     if not r.gates:
         return ""
-    lines = ["\n## البوابات الصلبة"]
+    lines = ["\n## Hard gates"]
     for gate in r.gates:
-        tag = "" if gate.blocking else " _(تحذيرية)_"
-        lines.append(f"{gate.icon} **{gate.label_ar}**{tag} — {gate.detail_ar}")
+        tag = "" if gate.blocking else " _(advisory)_"
+        lines.append(f"{gate.icon} **{gate.label}**{tag} — {gate.detail}")
     return "\n".join(lines)
 
 
@@ -99,32 +99,33 @@ def _risk_section(r: AnalysisResult) -> str:
     if r.risk is None:
         return ""
     p = r.risk
-    verb = "شراء" if r.direction is Direction.BULLISH else "بيع"
+    side = "Buy" if r.direction is Direction.BULLISH else "Sell"
     lines = [
-        "\n## خطة الصفقة",
-        "| العنصر | القيمة |",
+        "\n## Trade plan",
+        "| Item | Value |",
         "|---|---|",
-        f"| الاتجاه | {verb} |",
-        f"| الدخول | {p.entry:,.5f} |",
-        f"| وقف الخسارة | {p.stop_loss:,.5f} |",
-        f"| الهدف الأول (2R) | {p.take_profit_1:,.5f} |",
-        f"| الهدف الثاني (3.5R) | {p.take_profit_2:,.5f} |",
-        f"| مسافة الوقف | {p.stop_distance:,.5f} ({p.stop_distance / p.atr:.2f}× ATR) |",
+        f"| Side | {side} |",
+        f"| Entry | {p.entry:,.5f} |",
+        f"| Stop loss | {p.stop_loss:,.5f} |",
+        f"| Target 1 (2R) | {p.take_profit_1:,.5f} |",
+        f"| Target 2 (3.5R) | {p.take_profit_2:,.5f} |",
+        f"| Stop distance | {p.stop_distance:,.5f} ({p.stop_distance / p.atr:.2f}x ATR) |",
         "",
-        f"**أساس الوقف:** {p.basis_ar}",
+        f"**Stop basis:** {p.basis}",
     ]
     if p.position_size_hint:
-        lines.append(f"**الحجم:** {p.position_size_hint}")
-    lines.append("")
-    lines.append(
-        f"**ما الذي يُلغي هذه القراءة؟** إغلاق شمعة خلف {p.stop_loss:,.5f} "
-        f"يُبطل الأساس البنيوي للإشارة — عندها يخرج القرار من التحليل إلى إدارة الخسارة."
-    )
+        lines.append(f"**Sizing:** {p.position_size_hint}")
+    lines += [
+        "",
+        f"**What invalidates this read?** A close beyond {p.stop_loss:,.5f} breaks the "
+        "structural basis of the signal — at that point the decision leaves analysis "
+        "and becomes loss management.",
+    ]
     return "\n".join(lines)
 
 
 def _engines_section(r: AnalysisResult) -> str:
-    lines = ["\n## تفصيل المحركات"]
+    lines = ["\n## Engine breakdown"]
     contributions = {c.engine: c for c in r.breakdown.contributions}
 
     # The news engine appears among the engines but never votes, so it has no
@@ -137,82 +138,79 @@ def _engines_section(r: AnalysisResult) -> str:
         voters, key=lambda e: abs(contributions[e.engine].contribution), reverse=True
     ):
         c = contributions[engine.engine]
-        lines.append("")
-        lines.append(
-            f"### {engine.direction.emoji} {engine.engine.arabic}"
-        )
-        lines.append(
-            f"الاتجاه: **{engine.direction.arabic}** · القوة: {engine.strength:.2f} · "
-            f"الجودة: {engine.quality:.0%} · الوزن الفعّال: {c.effective_weight:.2f} · "
-            f"المساهمة: **{c.contribution:+.3f}**"
-        )
+        lines += [
+            "",
+            f"### {engine.direction.emoji} {engine.engine.label}",
+            f"Direction: **{engine.direction.label}** · strength {engine.strength:.2f} · "
+            f"quality {engine.quality:.0%} · effective weight {c.effective_weight:.2f} · "
+            f"contribution **{c.contribution:+.3f}**",
+        ]
         for ev in engine.evidence[:6]:
-            detail = f" — {ev.detail_ar}" if ev.detail_ar else ""
+            detail = f" — {ev.detail}" if ev.detail else ""
             if ev.contribution:
-                lines.append(f"   {ev.icon} {ev.label_ar} `{ev.contribution:+.3f}`{detail}")
+                lines.append(f"   {ev.icon} {ev.label} `{ev.contribution:+.3f}`{detail}")
             else:
-                lines.append(f"   ▫️ {ev.label_ar}{detail}")
-        for note in engine.notes_ar:
-            lines.append(f"   ⓘ {note}")
+                lines.append(f"   - {ev.label}{detail}")
+        for note in engine.notes:
+            lines.append(f"   (i) {note}")
 
     for engine in non_voting:
-        lines.append("")
-        lines.append(f"### 📅 {engine.engine.arabic}")
-        lines.append(
-            "_لا يصوّت على الاتجاه بالتصميم — يعمل كمُعدِّل للثقة وكبوابة صلبة فقط._"
-        )
+        lines += [
+            "",
+            f"### {engine.engine.label}",
+            "_Does not vote on direction by design — it acts as a confidence "
+            "modifier and a hard gate only._",
+        ]
         for ev in engine.evidence[:6]:
-            detail = f" — {ev.detail_ar}" if ev.detail_ar else ""
-            lines.append(f"   ▫️ {ev.label_ar}{detail}")
-        for note in engine.notes_ar:
-            lines.append(f"   ⓘ {note}")
+            detail = f" — {ev.detail}" if ev.detail else ""
+            lines.append(f"   - {ev.label}{detail}")
+        for note in engine.notes:
+            lines.append(f"   (i) {note}")
 
     if skipped:
-        lines.append("")
-        lines.append("### المحركات التي لم تشارك")
+        lines += ["", "### Engines that stood aside"]
         for engine in skipped:
-            lines.append(f"   ➖ {engine.engine.arabic}: {engine.skipped_reason}")
+            lines.append(f"   - {engine.engine.label}: {engine.skipped_reason}")
     return "\n".join(lines)
 
 
 def _math_section(r: AnalysisResult) -> str:
     b = r.breakdown
     return "\n".join([
-        "\n## كيف حُسبت درجة الثقة",
+        "\n## How the confidence was computed",
         "```",
-        f"إجماع المحركات   S = {b.raw_signed_score:+.4f}",
-        f"بعد المعايرة     K = L(|S|) = {b.calibrated_consensus:.4f}",
-        f"التشتت           D = {b.dispersion:.4f}",
-        f"التماسك          C = 1 - λ·D = {b.coherence:.4f}",
-        f"جودة البيانات      = {b.data_quality:.4f}",
-        f"مُعدِّل الأخبار      = {b.news_factor:.4f}",
-        f"ملاءمة نظام السوق  = {b.regime_fit:.4f}",
-        "-" * 46,
-        f"الثقة = K × C × أخبار × جودة × ملاءمة = {b.confidence:.4f}",
+        f"consensus        S = {b.raw_signed_score:+.4f}",
+        f"calibrated       K = L(|S|) = {b.calibrated_consensus:.4f}",
+        f"dispersion       D = {b.dispersion:.4f}",
+        f"coherence        C = 1 - lambda*D = {b.coherence:.4f}",
+        f"data quality       = {b.data_quality:.4f}",
+        f"news factor        = {b.news_factor:.4f}",
+        f"regime fit         = {b.regime_fit:.4f}",
+        "-" * 52,
+        f"confidence = K x C x news x quality x regime = {b.confidence:.4f}",
         "",
-        f"الوزن الفعّال {b.total_effective_weight:.2f} من {b.available_weight:.2f} متاح "
-        f"({b.coverage_ratio:.0%}) عبر {b.active_engines} محرك",
+        f"effective weight {b.total_effective_weight:.2f} of {b.available_weight:.2f} available "
+        f"({b.coverage_ratio:.0%}) across {b.active_engines} engines",
         "```",
     ])
 
 
 def _caveats(r: AnalysisResult) -> str:
-    lines = ["\n## ملاحظات وتحذيرات"]
-    if r.data_quality_issues:
-        for issue in r.data_quality_issues[:6]:
-            lines.append(f"   ⚠️ {issue}")
-    lines.append(
-        "   ⓘ هذا تحليل آلي لجودة الإعداد، وليس توصية استثمارية ولا وعداً بنتيجة. "
-        "لا يوجد نظام يضمن نسبة نجاح ثابتة."
-    )
-    lines.append(f"   ⓘ إصدار الإعدادات {r.config_version} · إصدار الكود {r.code_version}")
+    lines = ["\n## Notes and caveats"]
+    for issue in r.data_quality_issues[:6]:
+        lines.append(f"   ! {issue}")
+    lines += [
+        "   (i) This is an automated read of setup quality. It is not investment "
+        "advice and not a promise of any outcome. No system guarantees a fixed "
+        "success rate.",
+        f"   (i) Config version {r.config_version} · code version {r.code_version}",
+    ]
     return "\n".join(lines)
 
 
 def summary_line(r: AnalysisResult) -> str:
     """One-line summary used in the daily digest and the dashboard table."""
     if r.grade is Grade.NO_TRADE or r.direction is Direction.NEUTRAL:
-        return f"{r.symbol}: ⚪ لا فرصة ({r.confidence:.0%})"
-    icon = "🔺" if r.direction is Direction.BULLISH else "🔻"
-    flag = "" if not r.blocking_failures else " ⛔"
-    return f"{r.symbol}: {icon} {r.grade.value} · ثقة {r.confidence:.0%}{flag}"
+        return f"{r.symbol}: no setup ({r.confidence:.0%})"
+    flag = "" if not r.blocking_failures else " [BLOCKED]"
+    return f"{r.symbol}: {r.direction.emoji} {r.grade.value} · {r.confidence:.0%}{flag}"

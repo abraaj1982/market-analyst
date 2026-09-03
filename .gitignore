@@ -1,25 +1,23 @@
-# البيئة والأسرار
+# Environment and secrets
 .venv/
 venv/
 .env
 *.env
 !.env.example
 
-# البيانات المحلية (لا تُرفع أبداً — قد تكبر كثيراً)
+# Local data (never committed - it grows without bound)
 data/
 *.db
 *.db-wal
 *.db-shm
 *.sqlite3
 
-# مخرجات مؤقتة
-*.json
-!package.json
+# Scratch output
 analysis*.json
 report*.txt
 *.log
 
-# بايثون
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -30,7 +28,7 @@ dist/
 .coverage
 htmlcov/
 
-# محررات وأنظمة
+# Editors and OS
 .vscode/
 .idea/
 .DS_Store

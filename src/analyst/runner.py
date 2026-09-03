@@ -121,7 +121,7 @@ class AnalystService:
             try:
                 result = self.analyse_one(instrument, as_of=as_of)
             except Exception as exc:  # noqa: BLE001 - per-symbol isolation
-                log.error("فشل تحليل %s: %s", instrument.symbol, exc)
+                log.error("Analysis failed for %s: %s", instrument.symbol, exc)
                 continue
 
             results.append(result)
@@ -134,9 +134,9 @@ class AnalystService:
             try:
                 counts = self.tracker.update_open_signals()
                 if counts:
-                    log.info("تحديث نتائج الإشارات المفتوحة: %s", counts)
+                    log.info("Open signal outcomes updated: %s", counts)
             except Exception as exc:  # noqa: BLE001
-                log.warning("تعذّر تحديث نتائج الإشارات: %s", exc)
+                log.warning("Could not update signal outcomes: %s", exc)
 
         return results
 
@@ -145,7 +145,7 @@ class AnalystService:
             return False
         ok, detail = self.notifier.send(format_digest(results, self.settings.timezone.display))
         if not ok:
-            log.warning("تعذّر إرسال التقرير اليومي: %s", detail)
+            log.warning("Could not send the daily digest: %s", detail)
         return ok
 
     def prune(self) -> int:
@@ -156,14 +156,14 @@ class AnalystService:
     def _maybe_alert(self, result: AnalysisResult) -> None:
         send, reason = should_alert(result, self.settings.alerts)
         if not send:
-            log.debug("لا تنبيه لـ %s: %s", result.symbol, reason)
+            log.debug("No alert for %s: %s", result.symbol, reason)
             return
         if not self.notifier.enabled:
             log.info(
-                "إشارة مؤهلة على %s (%s) لكن تيليجرام غير مضبوط",
+                "Qualified signal on %s (%s) but Telegram is not configured",
                 result.symbol, result.grade.value,
             )
             return
         text = format_alert(result, self.settings.timezone.display)
         if self.notifier.send_alert(result, text):
-            log.info("أُرسل تنبيه %s (%s): %s", result.symbol, result.grade.value, reason)
+            log.info("Alert sent for %s (%s): %s", result.symbol, result.grade.value, reason)

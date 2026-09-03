@@ -198,12 +198,12 @@ class Aggregator:
         cfg = self.settings.scoring
         if breakdown.active_engines < cfg.min_active_engines:
             return (
-                f"عدد المحركات الفعّالة {breakdown.active_engines} أقل من الحد "
-                f"الأدنى {cfg.min_active_engines}"
+                f"Only {breakdown.active_engines} active engines, below the "
+                f"minimum of {cfg.min_active_engines}"
             )
         if breakdown.coverage_ratio < cfg.min_coverage_ratio:
             return (
-                f"التغطية {breakdown.coverage_ratio:.0%} من الوزن المتاح أقل من الحد "
-                f"الأدنى {cfg.min_coverage_ratio:.0%}"
+                f"Coverage {breakdown.coverage_ratio:.0%} of available weight, below "
+                f"the {cfg.min_coverage_ratio:.0%} floor"
             )
         return None

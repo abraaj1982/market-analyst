@@ -1,54 +1,60 @@
 # ============================================================================
-#  البوابات الصلبة — شروط منطقية إلزامية منفصلة عن درجة الثقة.
-#  درجة 95% مع بوابة ساقطة = لا صفقة. هذا مقصود.
+#  Hard gates — boolean requirements evaluated independently of the score.
+#
+#  A gate is not a weight. A 95% confidence read with a high-impact release in
+#  40 minutes is not a 95% opportunity; it is not an opportunity at all.
+#  Encoding that as a small negative weight would let a strong enough consensus
+#  buy its way past it, which is exactly what must not happen.
+#
+#  A gate that could not be evaluated is NOT a gate that passed.
 # ============================================================================
 gates:
   - id: data_quality
-    label_ar: "جودة البيانات كافية"
+    label: "Data quality is sufficient"
     blocking: true
     params: { min_score: 0.70 }
 
   - id: mtf_alignment
-    label_ar: "توافق الاتجاه على الفريمين الأعلى"
+    label: "Higher timeframes agree on direction"
     blocking: true
     params: { timeframes: ["1d", "4h"] }
 
   - id: min_confidence
-    label_ar: "درجة الثقة تتجاوز حد الفرصة"
+    label: "Confidence clears the opportunity floor"
     blocking: true
     params: { min_confidence: 0.60 }
 
   - id: risk_reward
-    label_ar: "نسبة العائد للمخاطرة مقبولة"
+    label: "Reward-to-risk is acceptable"
     blocking: true
     params: { min_rr: 1.8 }
 
   - id: news_blackout
-    label_ar: "لا خبر عالي الأثر في نافذة الحظر"
+    label: "No high-impact release inside the blackout window"
     blocking: true
     params: { minutes_before: 60, minutes_after: 30 }
 
   - id: engine_coverage
-    label_ar: "عدد كافٍ من المحركات شارك في القرار"
+    label: "Enough engines took part in the decision"
     blocking: true
     params: { min_active_engines: 3, min_effective_weight: 0.35 }
 
   - id: not_against_higher_trend
-    label_ar: "الإشارة لا تعاكس الاتجاه اليومي الكبير"
+    label: "Signal does not oppose the daily trend"
     blocking: false
     params: { timeframe: "1d" }
 
   - id: shortable
-    label_ar: "الاتجاه قابل للتنفيذ في هذا السوق"
+    label: "The direction is executable in this market"
     blocking: true
     params: {}
 
   - id: earnings_blackout
-    label_ar: "لا إعلان أرباح وشيك"
+    label: "No imminent earnings release"
     blocking: true
     params: { days_before: 2, days_after: 1 }
 
   - id: volatility_sane
-    label_ar: "التقلب ضمن نطاق قابل للتداول"
+    label: "Volatility is inside a tradeable band"
     blocking: false
     params: { min_atr_percentile: 0.10, max_atr_percentile: 0.95 }

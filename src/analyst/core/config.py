@@ -169,7 +169,7 @@ class Settings(BaseModel):
 
 class GateSpec(BaseModel):
     id: str
-    label_ar: str
+    label: str
     blocking: bool = True
     params: dict[str, Any] = Field(default_factory=dict)
 
@@ -206,13 +206,13 @@ class Secrets(BaseModel):
 
 def _read_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
-        raise ConfigError(f"ملف الإعدادات غير موجود: {path}")
+        raise ConfigError(f"Configuration file not found: {path}")
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
-        raise ConfigError(f"خطأ في صياغة YAML داخل {path.name}: {exc}") from exc
+        raise ConfigError(f"Malformed YAML in {path.name}: {exc}") from exc
     if not isinstance(data, dict):
-        raise ConfigError(f"{path.name} يجب أن يكون خريطة (mapping) في جذره")
+        raise ConfigError(f"{path.name} must have a mapping at its root")
     return data
 
 
@@ -222,7 +222,7 @@ def load_settings(path: Path | None = None) -> Settings:
     try:
         return Settings.model_validate(_read_yaml(src))
     except ValidationError as exc:
-        raise ConfigError(f"إعدادات غير صالحة في {src.name}:\n{exc}") from exc
+        raise ConfigError(f"Invalid settings in {src.name}:\n{exc}") from exc
 
 
 @lru_cache(maxsize=1)
@@ -232,7 +232,7 @@ def load_gates(path: Path | None = None) -> list[GateSpec]:
     try:
         return [GateSpec.model_validate(g) for g in raw]
     except ValidationError as exc:
-        raise ConfigError(f"بوابات غير صالحة في {src.name}:\n{exc}") from exc
+        raise ConfigError(f"Invalid gates in {src.name}:\n{exc}") from exc
 
 
 #: Default timeframe capability per market, used when the watchlist omits it.
@@ -248,7 +248,7 @@ class WatchlistEntry(BaseModel):
     """Raw watchlist row before it becomes an `Instrument`."""
 
     symbol: str
-    name_ar: str
+    name: str
     market: Market
     asset_class: AssetClass
     provider_symbol: str
@@ -264,7 +264,7 @@ class WatchlistEntry(BaseModel):
         shortable = self.shortable if self.shortable is not None else self.market is not Market.MSX
         return Instrument(
             symbol=self.symbol,
-            name_ar=self.name_ar,
+            name=self.name,
             market=self.market,
             asset_class=self.asset_class,
             provider_symbol=self.provider_symbol,
@@ -282,11 +282,11 @@ def load_watchlist(path: Path | None = None) -> list[WatchlistEntry]:
     try:
         entries = [WatchlistEntry.model_validate(e) for e in raw]
     except ValidationError as exc:
-        raise ConfigError(f"قائمة متابعة غير صالحة في {src.name}:\n{exc}") from exc
+        raise ConfigError(f"Invalid watchlist in {src.name}:\n{exc}") from exc
     seen: set[str] = set()
     for e in entries:
         if e.symbol in seen:
-            raise ConfigError(f"رمز مكرر في قائمة المتابعة: {e.symbol}")
+            raise ConfigError(f"Duplicate symbol in the watchlist: {e.symbol}")
         seen.add(e.symbol)
     return entries
 

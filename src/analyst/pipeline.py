@@ -52,11 +52,13 @@ def default_engines(settings: Settings) -> list[Engine]:
 class Pipeline:
     def __init__(
         self,
-        context_builder: ContextBuilder,
+        context_builder: ContextBuilder | None,
         settings: Settings,
         gate_specs: list[GateSpec],
         engines: list[Engine] | None = None,
     ) -> None:
+        # `None` is legitimate: the backtester builds contexts itself from stored
+        # history and only ever calls `analyse_context`.
         self.context_builder = context_builder
         self.settings = settings
         self.engines = engines if engines is not None else default_engines(settings)
@@ -66,6 +68,10 @@ class Pipeline:
     def analyse(
         self, instrument: Instrument, as_of: datetime | None = None, refresh: bool = True
     ) -> AnalysisResult:
+        if self.context_builder is None:
+            raise RuntimeError(
+                "This Pipeline has no ContextBuilder — call analyse_context directly"
+            )
         as_of = as_of or now_utc()
         ctx = self.context_builder.build(instrument, as_of=as_of, refresh=refresh)
         return self.analyse_context(ctx)
@@ -99,7 +105,7 @@ class Pipeline:
 
         result = AnalysisResult(
             symbol=ctx.instrument.symbol,
-            name_ar=ctx.instrument.name_ar,
+            name=ctx.instrument.name,
             market=ctx.instrument.market,
             as_of=ctx.as_of,
             spot=ctx.spot,
@@ -121,7 +127,7 @@ class Pipeline:
         if result.blocking_failures and grade in (Grade.A_PLUS, Grade.A):
             result.grade = Grade.B
 
-        result.report_ar = build_report(result, self.settings.timezone.display)
+        result.report = build_report(result, self.settings.timezone.display)
         return result
 
     @staticmethod

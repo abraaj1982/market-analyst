@@ -43,14 +43,14 @@ class ClassicTaEngine(Engine):
         tf = tfs[len(tfs) // 2]
         df = ctx.series[tf].df
         if len(df) < 120:
-            return EngineResult.skipped(self.id, f"تاريخ غير كافٍ على {tf.arabic}")
+            return EngineResult.skipped(self.id, f"Not enough history on {tf.label}")
 
         close = df["close"]
         price = float(close.iloc[-1])
         atr_series = atr(df["high"], df["low"], close, 14)
         atr_now = float(atr_series.iloc[-1])
         if atr_now <= 0:
-            return EngineResult.skipped(self.id, "تقلب صفري — لا يمكن قياس المسافات")
+            return EngineResult.skipped(self.id, "Zero volatility — distances cannot be measured")
 
         builder = ScoreBuilder()
         metrics: dict[str, float] = {}
@@ -60,7 +60,7 @@ class ClassicTaEngine(Engine):
         max_distance = self.settings.risk.max_level_distance_atr * atr_now
         levels = [lv for lv in levels if abs(lv[0] - price) <= max_distance]
         self._score_levels(builder, metrics, levels, price, atr_now)
-        self._score_channel(builder, metrics, close, atr_now, tf.arabic)
+        self._score_channel(builder, metrics, close, atr_now, tf.label)
         self._score_fibonacci(builder, metrics, df, price, atr_now)
         self._score_breakout_retest(builder, metrics, df, levels, atr_now)
 
@@ -94,7 +94,7 @@ class ClassicTaEngine(Engine):
         builder: ScoreBuilder, metrics: dict, levels: list, price: float, atr_now: float
     ) -> None:
         if not levels:
-            builder.add("levels", "مستويات دعم ومقاومة", 0.0, 1.0)
+            builder.add("levels", "Support and resistance", 0.0, 1.0)
             return
 
         below = [lv for lv in levels if lv[0] < price]
@@ -108,19 +108,25 @@ class ClassicTaEngine(Engine):
             dist = (price - nearest_support[0]) / atr_now
             # sitting on support is bullish; strength scales with touch count
             score += clamp((1.0 - min(dist, 3.0) / 3.0) * min(nearest_support[1], 4) / 4.0)
-            details.append(f"دعم {nearest_support[0]:.4f} ({nearest_support[1]} لمسة، {dist:.1f} ATR)")
+            details.append(
+                f"Support {nearest_support[0]:.4f} "
+                f"({nearest_support[1]} touches, {dist:.1f} ATR away)"
+            )
             metrics["support"] = round(nearest_support[0], 5)
             metrics["support_distance_atr"] = round(dist, 3)
         if nearest_resistance:
             dist = (nearest_resistance[0] - price) / atr_now
             score -= clamp((1.0 - min(dist, 3.0) / 3.0) * min(nearest_resistance[1], 4) / 4.0)
-            details.append(f"مقاومة {nearest_resistance[0]:.4f} ({nearest_resistance[1]} لمسة، {dist:.1f} ATR)")
+            details.append(
+                f"Resistance {nearest_resistance[0]:.4f} "
+                f"({nearest_resistance[1]} touches, {dist:.1f} ATR away)"
+            )
             metrics["resistance"] = round(nearest_resistance[0], 5)
             metrics["resistance_distance_atr"] = round(dist, 3)
 
         builder.add(
-            "support_resistance", "الموقع بين الدعم والمقاومة",
-            clamp(score), 1.2, detail_ar=" · ".join(details), record_when_zero=True,
+            "support_resistance", "Position between support and resistance",
+            clamp(score), 1.2, detail=" · ".join(details), record_when_zero=True,
         )
         metrics["levels_found"] = float(len(levels))
 
@@ -144,14 +150,14 @@ class ClassicTaEngine(Engine):
         stretch_penalty = -clamp(position) * 0.35
 
         builder.add(
-            "regression_slope", f"ميل قناة الانحدار ({tf_label})",
+            "regression_slope", f"Regression channel slope ({tf_label})",
             slope_score, 1.0,
-            detail_ar=f"الميل {slope / atr_now:+.3f} ATR لكل شمعة على مدى 90 شمعة",
+            detail=f"Slope {slope / atr_now:+.3f} ATR per bar over 90 bars",
         )
         builder.add(
-            "channel_position", "موقع السعر داخل القناة",
+            "channel_position", "Position inside the channel",
             stretch_penalty, 0.6,
-            detail_ar=f"السعر يبعد {position:+.2f} انحراف معياري عن خط الانحدار",
+            detail=f"Price is {position:+.2f} standard deviations from the fit",
         )
         metrics["regression_slope_atr"] = round(float(slope) / atr_now, 4)
         metrics["channel_position_sigma"] = round(float(position), 3)
@@ -177,20 +183,20 @@ class ClassicTaEngine(Engine):
             # a pullback into the golden pocket favours resumption of the leg
             value = 0.75 if leg_up else -0.75
             builder.add(
-                "fibonacci_pocket", "ارتداد داخل منطقة فيبوناتشي الذهبية",
+                "fibonacci_pocket", "Retracement into the Fibonacci golden pocket",
                 value, 1.0,
-                detail_ar=(
-                    f"النطاق [{pocket_lo:.4f} – {pocket_hi:.4f}] من ساق "
-                    f"{'صاعدة' if leg_up else 'هابطة'} ({lo:.4f} → {hi:.4f})"
+                detail=(
+                    f"Zone [{pocket_lo:.4f} – {pocket_hi:.4f}] of the "
+                    f"{'up' if leg_up else 'down'} leg ({lo:.4f} → {hi:.4f})"
                 ),
             )
         else:
             retracement = (hi - price) / (hi - lo) if leg_up else (price - lo) / (hi - lo)
             if retracement > 0.90:
                 builder.add(
-                    "fibonacci_invalidated", "الساق السابقة مُلغاة",
+                    "fibonacci_invalidated", "Prior leg invalidated",
                     -0.5 if leg_up else 0.5, 0.7,
-                    detail_ar=f"تم ارتداد {retracement:.0%} من الساق — الهيكل السابق انتهى",
+                    detail=f"{retracement:.0%} of the leg retraced — the prior structure is done",
                 )
             metrics["fib_retracement"] = round(float(retracement), 3)
         metrics["fib_in_pocket"] = float(in_pocket)
@@ -225,8 +231,11 @@ class ClassicTaEngine(Engine):
             return
         strength, level, direction = best
         builder.add(
-            "breakout_retest", "كسر مستوى ثم إعادة اختباره",
+            "breakout_retest", "Level broken and now retested",
             direction * clamp(0.4 + 0.6 * strength), 1.1,
-            detail_ar=f"المستوى {level:.4f} تم كسره {'صعوداً' if direction > 0 else 'هبوطاً'} ويُعاد اختباره الآن",
+            detail=(
+                f"{level:.4f} broke "
+                f"{'upward' if direction > 0 else 'downward'} and is being retested"
+            ),
         )
         metrics["retest_level"] = round(level, 5)

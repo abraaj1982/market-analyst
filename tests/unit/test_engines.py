@@ -160,7 +160,7 @@ def test_macro_engine_reads_real_yields_for_gold(settings, gold):
 
 def test_macro_engine_declines_for_msx(settings):
     local = Instrument(
-        symbol="BKMB", name_ar="بنك مسقط", market=Market.MSX, asset_class=AssetClass.EQUITY,
+        symbol="BKMB", name="بنك مسقط", market=Market.MSX, asset_class=AssetClass.EQUITY,
         provider_symbol="BKMB", currency="OMR",
         supported_timeframes=(Timeframe.D1,), shortable=False,
     )
@@ -169,7 +169,7 @@ def test_macro_engine_declines_for_msx(settings):
                                             available=True))
     result = MacroEngine(settings).analyse(ctx)
     assert result.skipped_reason is not None
-    assert "العماني" in result.skipped_reason
+    assert "Omani" in result.skipped_reason
 
 
 # ------------------------------------------------------------------ COT engine
@@ -191,7 +191,7 @@ def test_volume_engine_stands_aside_without_real_volume(settings, gold):
     for series in ctx.series.values():
         series.df["volume"] = 0.0
     result = VolumeSeasonalityEngine(settings).analyse(ctx)
-    assert any("أحجام" in note for note in result.notes_ar) or result.skipped_reason
+    assert any("volume" in note for note in result.notes) or result.skipped_reason
 
 
 # ----------------------------------------------------------------- fundamentals
@@ -221,10 +221,10 @@ def test_engine_crash_is_contained(settings, gold):
         id = EngineId.TREND
 
         def _run(self, ctx):
-            raise RuntimeError("انفجار متعمد")
+            raise RuntimeError("deliberate blow-up")
 
     ctx = build_context(gold, {Timeframe.D1: trending_closes(300, 0.1)})
     result = Exploding().analyse(ctx)
     assert result.skipped_reason is not None
-    assert "انفجار متعمد" in result.skipped_reason
+    assert "deliberate blow-up" in result.skipped_reason
     assert result.quality == 0.0

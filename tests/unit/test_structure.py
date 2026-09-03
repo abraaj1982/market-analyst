@@ -43,7 +43,7 @@ def test_classify_structure_uptrend_and_downtrend():
 def test_classify_structure_reports_insufficient_data():
     direction, label = classify_structure([])
     assert direction == 0
-    assert "غير كافية" in label
+    assert "insufficient" in label
 
 
 def test_structure_events_have_displacement_not_extension():
@@ -131,11 +131,11 @@ def test_liquidity_sweep_requires_reclaim():
 def test_premium_discount_positions():
     rising = make_frame(np.linspace(100, 200, 120))
     pos, label = premium_discount(rising, lookback=60)
-    assert pos > 0.9 and "علاوة" in label
+    assert pos > 0.9 and "Premium" in label
 
     falling = make_frame(np.linspace(200, 100, 120))
     pos2, label2 = premium_discount(falling, lookback=60)
-    assert pos2 < 0.1 and "خصم" in label2
+    assert pos2 < 0.1 and "Discount" in label2
 
 
 def test_fib_levels_ordering():

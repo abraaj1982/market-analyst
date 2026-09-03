@@ -132,7 +132,7 @@ def test_single_engine_cannot_produce_a_grade(aggregator):
     breakdown = aggregator.aggregate(results, Regime.RANGING, AssetClass.METAL, 1.0)
     assert breakdown.confidence > 0.8            # the raw number is high...
     assert aggregator.grade(breakdown) is Grade.NO_TRADE   # ...and still refused
-    assert "المحركات الفعّالة" in aggregator.coverage_shortfall(breakdown)
+    assert "active engines" in aggregator.coverage_shortfall(breakdown)
 
 
 def test_full_coverage_reaches_top_grade(aggregator):

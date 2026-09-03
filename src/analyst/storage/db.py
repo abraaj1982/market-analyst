@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -49,9 +49,36 @@ def get_engine() -> Engine:
     return _engine
 
 
+#: Columns renamed in 1.1.0 when the locale suffix was dropped from the schema.
+#: `create_all` only creates missing tables — it never alters an existing one —
+#: so an upgraded install would otherwise fail on the first insert with
+#: "table analyses has no column named name".
+_RENAMES: dict[str, list[tuple[str, str]]] = {
+    "analyses": [("name_ar", "name"), ("report_ar", "report")],
+}
+
+
+def _migrate_legacy_columns(engine: Engine) -> None:
+    """Rename pre-1.1.0 columns in place. Safe to run on every start."""
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+
+    for table, renames in _RENAMES.items():
+        if table not in existing_tables:
+            continue
+        columns = {c["name"] for c in inspector.get_columns(table)}
+        for old, new in renames:
+            if old in columns and new not in columns:
+                with engine.begin() as conn:
+                    conn.execute(text(f'ALTER TABLE "{table}" RENAME COLUMN "{old}" TO "{new}"'))
+                log.info("Migrated %s.%s -> %s", table, old, new)
+
+
 def init_db() -> None:
-    Base.metadata.create_all(get_engine())
-    log.info("قاعدة البيانات جاهزة: %s", load_settings().resolved_db_url())
+    engine = get_engine()
+    _migrate_legacy_columns(engine)
+    Base.metadata.create_all(engine)
+    log.info("Database ready: %s", load_settings().resolved_db_url())
 
 
 @contextmanager

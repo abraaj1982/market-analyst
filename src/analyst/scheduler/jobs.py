@@ -34,37 +34,37 @@ def start_scheduler(service) -> BackgroundScheduler:
         try:
             results = service.run_once()
             actionable = sum(1 for r in results if r.is_actionable)
-            log.info("دورة تحليل: %d رمز · %d فرصة مؤهلة", len(results), actionable)
+            log.info("Analysis cycle: %d symbols, %d qualified setups", len(results), actionable)
         except Exception:
-            log.exception("فشلت دورة التحليل")
+            log.exception("Analysis cycle failed")
 
     def digest_job() -> None:
         try:
             results = service.run_once(alert=False)
             service.send_digest(results)
-            log.info("أُرسل التقرير اليومي")
+            log.info("Daily digest sent")
         except Exception:
-            log.exception("فشل التقرير اليومي")
+            log.exception("Daily digest failed")
 
     def maintenance_job() -> None:
         try:
             removed = service.prune()
             counts = service.tracker.update_open_signals()
-            log.info("صيانة: حُذفت %d شمعة قديمة · نتائج الإشارات %s", removed, counts)
+            log.info("Maintenance: pruned %d old candles, signal outcomes %s", removed, counts)
         except Exception:
-            log.exception("فشلت الصيانة الليلية")
+            log.exception("Nightly maintenance failed")
 
     scheduler.add_job(analysis_job, IntervalTrigger(minutes=interval), id="analysis",
-                      name="دورة التحليل")
+                      name="Analysis cycle")
     scheduler.add_job(
         digest_job,
         CronTrigger(hour=settings.alerts.daily_digest_hour_local, minute=0,
                     timezone=settings.timezone.display),
-        id="digest", name="التقرير اليومي",
+        id="digest", name="Daily digest",
     )
     scheduler.add_job(maintenance_job, CronTrigger(hour=2, minute=30, timezone="UTC"),
-                      id="maintenance", name="الصيانة الليلية")
+                      id="maintenance", name="Nightly maintenance")
 
     scheduler.start()
-    log.info("الجدولة بدأت — تحليل كل %d دقيقة", interval)
+    log.info("Scheduler started — analysing every %d minutes", interval)
     return scheduler

@@ -1,33 +1,33 @@
 # ============================================================================
-#  التقويم الاقتصادي — بدون اشتراك مدفوع
+#  Economic calendar without a paid subscription.
 #
-#  الأحداث المتكررة (NFP، CPI، PPI) يولّدها النظام تلقائياً بقواعد زمنية.
-#  اجتماعات الفيدرالي (FOMC) لا تتبع قاعدة ثابتة → تُكتب يدوياً مرة واحدة سنوياً
-#  من الموقع الرسمي: federalreserve.gov/monetarypolicy/fomccalendars.htm
+#  Recurring releases (NFP, CPI, PPI) follow published, stable scheduling rules
+#  and are generated deterministically. FOMC meetings follow no rule, so they
+#  are listed explicitly and take two minutes to refresh once a year from
+#  federalreserve.gov/monetarypolicy/fomccalendars.htm
 #
-#  كل الأوقات UTC. تحديث هذا الملف = دقيقتان في بداية كل سنة.
+#  All times are UTC.
 # ============================================================================
 
-# ---- قواعد الأحداث المتكررة ----
 recurring:
   - id: NFP
-    label_ar: "تقرير الوظائف الأمريكية (NFP)"
+    label: "US Non-Farm Payrolls"
     impact: high
     currency: USD
-    rule: first_friday          # أول جمعة من كل شهر
+    rule: first_friday
     time_utc: "13:30"
 
   - id: CPI
-    label_ar: "مؤشر أسعار المستهلك الأمريكي (CPI)"
+    label: "US Consumer Price Index"
     impact: high
     currency: USD
-    rule: nth_weekday           # ثاني أربعاء تقريبياً — راجع التواريخ الدقيقة أدناه
+    rule: nth_weekday           # approximately the second Wednesday
     nth: 2
-    weekday: 2                  # 0=الاثنين ... 6=الأحد
+    weekday: 2                  # 0=Monday ... 6=Sunday
     time_utc: "13:30"
 
   - id: PPI
-    label_ar: "مؤشر أسعار المنتجين (PPI)"
+    label: "US Producer Price Index"
     impact: medium
     currency: USD
     rule: nth_weekday
@@ -36,15 +36,15 @@ recurring:
     time_utc: "13:30"
 
   - id: JOBLESS
-    label_ar: "طلبات إعانة البطالة الأسبوعية"
+    label: "US Initial Jobless Claims"
     impact: low
     currency: USD
     rule: weekly
-    weekday: 3                  # الخميس
+    weekday: 3                  # Thursday
     time_utc: "13:30"
 
   - id: RETAIL
-    label_ar: "مبيعات التجزئة الأمريكية"
+    label: "US Retail Sales"
     impact: medium
     currency: USD
     rule: nth_weekday
@@ -52,11 +52,11 @@ recurring:
     weekday: 2
     time_utc: "13:30"
 
-# ---- أحداث محددة بتواريخ (حدّثها سنوياً) ----
-# قرار الفائدة يصدر 18:00 UTC والمؤتمر الصحفي 18:30 UTC
+# Explicit dates - refresh once a year.
+# The rate decision lands at 18:00 UTC and the press conference at 18:30 UTC.
 fixed:
   - id: FOMC
-    label_ar: "قرار الفائدة الأمريكي + المؤتمر الصحفي (FOMC)"
+    label: "FOMC rate decision and press conference"
     impact: high
     currency: USD
     datetimes_utc:
@@ -70,7 +70,7 @@ fixed:
       - "2026-12-16 19:00"
 
   - id: JACKSON_HOLE
-    label_ar: "ندوة جاكسون هول"
+    label: "Jackson Hole symposium"
     impact: high
     currency: USD
     datetimes_utc:

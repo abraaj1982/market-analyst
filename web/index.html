@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>محلل الأسواق</title>
+<title>Market Analyst</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1117'/%3E%3Cpath d='M6 22l6-8 5 5 9-11' stroke='%234a9eff' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
@@ -15,81 +15,175 @@
   <div class="brand">
     <span class="logo">◆</span>
     <div>
-      <h1>محلل الأسواق</h1>
-      <p class="sub" id="profileLine">جارٍ التحميل…</p>
+      <h1>Market Analyst</h1>
+      <p class="sub" id="profileLine">Loading…</p>
     </div>
   </div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="markets">Markets</button>
+    <button class="tab" data-tab="companies">Companies</button>
+  </nav>
   <div class="topbar-actions">
     <span class="pill" id="clock">—</span>
-    <button id="runBtn" class="btn">تشغيل تحليل الآن</button>
-    <button id="refreshBtn" class="btn ghost">تحديث</button>
+    <button id="runBtn" class="btn">Run analysis</button>
+    <button id="refreshBtn" class="btn ghost">Refresh</button>
   </div>
 </header>
 
 <main>
-  <section class="kpis" id="kpis"></section>
+  <!-- ============================ MARKETS ============================ -->
+  <section id="tab-markets">
+    <div class="kpis" id="kpis"></div>
 
-  <section class="panel">
-    <div class="panel-head">
-      <h2>قائمة المتابعة</h2>
-      <div class="filters">
-        <label class="switch"><input type="checkbox" id="onlyActionable"><span>الفرص المؤهلة فقط</span></label>
-        <input type="search" id="search" placeholder="بحث عن رمز…">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Watchlist</h2>
+        <div class="filters">
+          <label class="switch"><input type="checkbox" id="onlyActionable"><span>Qualified only</span></label>
+          <input type="search" id="search" placeholder="Search symbol…">
+        </div>
       </div>
-    </div>
-    <div class="table-wrap">
-      <table id="table">
-        <thead>
-          <tr>
-            <th data-sort="symbol">الرمز</th>
-            <th data-sort="direction">الاتجاه</th>
-            <th data-sort="confidence">درجة الثقة</th>
-            <th data-sort="grade">التصنيف</th>
-            <th data-sort="regime">حالة السوق</th>
-            <th data-sort="coverage_ratio">التغطية</th>
-            <th data-sort="spot">السعر</th>
-            <th>الحالة</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-sort="symbol">Symbol</th>
+              <th data-sort="direction">Direction</th>
+              <th data-sort="confidence">Confidence</th>
+              <th data-sort="grade">Grade</th>
+              <th data-sort="regime">Regime</th>
+              <th data-sort="coverage_ratio">Coverage</th>
+              <th data-sort="spot">Price</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="detailPanel" hidden>
+      <div class="panel-head">
+        <h2 id="detailTitle">—</h2>
+        <div class="tf-buttons" id="tfButtons"></div>
+      </div>
+      <div id="chart" class="chart"></div>
+      <div class="detail-grid">
+        <div>
+          <h3>Engine contributions</h3>
+          <div id="contributions" class="contrib"></div>
+        </div>
+        <div>
+          <h3>Hard gates</h3>
+          <ul id="gates" class="gates"></ul>
+        </div>
+      </div>
+      <details class="report">
+        <summary>Full report</summary>
+        <pre id="report"></pre>
+      </details>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Forward-test performance</h2></div>
+      <div id="stats" class="stats"></div>
+      <p class="disclaimer">
+        These come from signals recorded with their levels <b>before</b> the outcome was
+        known — not from a backtest. No win rate is shown until 30 trades have resolved.
+      </p>
+    </section>
   </section>
 
-  <section class="panel" id="detailPanel" hidden>
-    <div class="panel-head">
-      <h2 id="detailTitle">—</h2>
-      <div class="tf-buttons" id="tfButtons"></div>
-    </div>
-    <div id="chart" class="chart"></div>
-    <div class="detail-grid">
-      <div>
-        <h3>مساهمة المحركات</h3>
-        <div id="contributions" class="contrib"></div>
+  <!-- =========================== COMPANIES =========================== -->
+  <section id="tab-companies" hidden>
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Manual company register</h2>
+        <button id="newCompanyBtn" class="btn">Add company</button>
       </div>
-      <div>
-        <h3>البوابات الصلبة</h3>
-        <ul id="gates" class="gates"></ul>
+      <p class="notice">
+        For markets with no price feed — Muscat Stock Exchange and similar. You supply the
+        published figures and the announcements; the system assesses dividend quality and
+        news tone. It does <b>not</b> produce entries, stops or targets here, because
+        without price history there is nothing to base them on.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Symbol</th><th>Name</th><th>Sector</th><th>Price</th>
+              <th>Yield</th><th>Payout</th><th>News</th><th>Updated</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="companyBody"></tbody>
+        </table>
       </div>
-    </div>
-    <details class="report">
-      <summary>التقرير الكامل</summary>
-      <pre id="report"></pre>
-    </details>
-  </section>
+    </section>
 
-  <section class="panel">
-    <div class="panel-head"><h2>أداء التتبّع الأمامي</h2></div>
-    <div id="stats" class="stats"></div>
-    <p class="disclaimer">
-      هذه أرقام من إشارات سُجّلت بمستوياتها <b>قبل</b> معرفة النتيجة، وليست backtest.
-      لا يعرض النظام نسبة إصابة قبل اكتمال 30 صفقة محسومة على الأقل.
-    </p>
+    <section class="panel" id="companyForm" hidden>
+      <div class="panel-head"><h2 id="companyFormTitle">Add company</h2></div>
+      <form id="cForm" class="form-grid">
+        <label>Symbol <input name="symbol" required placeholder="BKMB"></label>
+        <label>Name <input name="name" required placeholder="Bank Muscat"></label>
+        <label>Sector <input name="sector" placeholder="Banking"></label>
+        <label>Currency <input name="currency" value="OMR"></label>
+        <label>Price <input name="price" type="number" step="any" placeholder="0.240"></label>
+        <label>Dividend per share <input name="dividend_per_share" type="number" step="any" placeholder="0.018"></label>
+        <label>Previous dividend <input name="previous_dividend_per_share" type="number" step="any"></label>
+        <label>EPS <input name="eps" type="number" step="any" placeholder="0.030"></label>
+        <label>Previous EPS <input name="previous_eps" type="number" step="any"></label>
+        <label>Book value / share <input name="book_value_per_share" type="number" step="any"></label>
+        <label>Debt / equity % <input name="debt_to_equity" type="number" step="any" placeholder="85"></label>
+        <label>Profit margin (0–1) <input name="profit_margin" type="number" step="any" placeholder="0.22"></label>
+        <label>Revenue growth (0–1) <input name="revenue_growth" type="number" step="any" placeholder="0.08"></label>
+        <label>Years paying dividend <input name="dividend_years_paid" type="number" step="1"></label>
+        <label>Years cut / suspended <input name="dividend_years_cut" type="number" step="1"></label>
+        <label class="wide">Notes <input name="notes" placeholder="Anything worth remembering"></label>
+        <div class="form-actions">
+          <button type="submit" class="btn">Save</button>
+          <button type="button" id="cancelCompany" class="btn ghost">Cancel</button>
+          <span class="hint">Every field except symbol and name is optional. Missing values
+            lower the assessment's own confidence rather than being assumed.</span>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel" id="companyDetail" hidden>
+      <div class="panel-head">
+        <h2 id="companyTitle">—</h2>
+        <span id="companyVerdict" class="pill"></span>
+      </div>
+      <div class="detail-grid">
+        <div>
+          <h3>Assessment</h3>
+          <div id="companyEngines" class="contrib"></div>
+          <h3 style="margin-top:18px">Gates</h3>
+          <ul id="companyGates" class="gates"></ul>
+        </div>
+        <div>
+          <h3>Announcements</h3>
+          <form id="newsForm" class="news-form">
+            <input name="headline" required placeholder="Paste a headline or announcement (English or Arabic)…">
+            <div class="news-row">
+              <input name="source" placeholder="Source (optional)">
+              <input name="published_at" type="date">
+              <button type="submit" class="btn">Add</button>
+            </div>
+            <div id="sentimentPreview" class="preview"></div>
+          </form>
+          <ul id="newsList" class="news-list"></ul>
+        </div>
+      </div>
+      <details class="report">
+        <summary>Full assessment report</summary>
+        <pre id="companyReport"></pre>
+      </details>
+    </section>
   </section>
 </main>
 
 <footer>
-  <span>تحليل آلي لجودة الإعداد — ليس توصية استثمارية ولا وعداً بنتيجة.</span>
+  <span>Automated setup-quality analysis — not investment advice, and not a promise of any outcome.</span>
   <span id="version"></span>
 </footer>
 

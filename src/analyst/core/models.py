@@ -35,7 +35,7 @@ class Instrument(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     symbol: str = Field(description="Canonical internal symbol, e.g. XAUUSD")
-    name_ar: str
+    name: str
     market: Market
     asset_class: AssetClass
     provider_symbol: str = Field(description="Symbol as the data provider expects it")
@@ -166,8 +166,8 @@ class Evidence(BaseModel):
     """
 
     code: str
-    label_ar: str
-    detail_ar: str = ""
+    label: str
+    detail: str = ""
     direction: Direction = Direction.NEUTRAL
     contribution: float = 0.0
 
@@ -187,7 +187,7 @@ class EngineResult(BaseModel):
     quality: float = Field(ge=0.0, le=1.0)
     evidence: list[Evidence] = Field(default_factory=list)
     metrics: dict[str, float] = Field(default_factory=dict)
-    notes_ar: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
     #: Set when the engine could not run at all (missing data, unsupported market).
     skipped_reason: str | None = None
 
@@ -238,9 +238,9 @@ class EngineContribution(BaseModel):
 
 class GateResult(BaseModel):
     gate: str
-    label_ar: str
+    label: str
     status: GateStatus
-    detail_ar: str = ""
+    detail: str = ""
     blocking: bool = True
 
     @property
@@ -258,7 +258,7 @@ class RiskPlan(BaseModel):
     risk_reward: float
     stop_distance: float
     atr: float
-    basis_ar: str
+    basis: str
     position_size_hint: str | None = None
 
 
@@ -294,7 +294,7 @@ class AnalysisResult(BaseModel):
     model_config = ConfigDict(ser_json_timedelta="iso8601")
 
     symbol: str
-    name_ar: str
+    name: str
     market: Market
     as_of: datetime
     spot: float
@@ -306,7 +306,7 @@ class AnalysisResult(BaseModel):
     engines: list[EngineResult] = Field(default_factory=list)
     gates: list[GateResult] = Field(default_factory=list)
     risk: RiskPlan | None = None
-    report_ar: str = ""
+    report: str = ""
     data_quality_issues: list[str] = Field(default_factory=list)
     config_version: str = "0"
     code_version: str = "0"

@@ -36,9 +36,9 @@ class MacroEngine(Engine):
 
     def applies_to(self, ctx: MarketContext) -> tuple[bool, str]:
         if ctx.instrument.market is Market.MSX:
-            return False, "المؤشرات الكلية الأمريكية لا تنطبق على السوق العماني مباشرة"
+            return False, "US macro series do not map onto a local Omani name"
         if not ctx.macro.available:
-            return False, "البيانات الكلية (FRED) غير متاحة حالياً"
+            return False, "Macro data (FRED) is not available right now"
         return True, ""
 
     def _run(self, ctx: MarketContext) -> EngineResult:
@@ -70,27 +70,27 @@ class MacroEngine(Engine):
                 continue
             change = changes[sid]
             value = sign * scale(change, scales.get(sid, 1.0))
-            direction_word = "ارتفاع" if change > 0 else "انخفاض"
+            direction_word = "Rose" if change > 0 else "Fell"
             builder.add(
                 f"macro_{sid.lower()}",
                 _LABELS[sid],
                 value,
                 abs(sign),
-                detail_ar=(
-                    f"{direction_word} بمقدار {abs(change):.2f}{_UNITS[sid]} "
-                    f"— المستوى الحالي {values.get(sid, float('nan')):.2f}"
+                detail=(
+                    f"{direction_word} by {abs(change):.2f}{_UNITS[sid]} "
+                    f"— now at {values.get(sid, float('nan')):.2f}"
                 ),
             )
             metrics[f"{sid}_change"] = round(change, 4)
             metrics[f"{sid}_level"] = round(values.get(sid, 0.0), 4)
 
         if not builder.items and builder.weight_total == 0:
-            return EngineResult.skipped(self.id, "لا توجد سلاسل كلية صالحة للقراءة")
+            return EngineResult.skipped(self.id, "No usable macro series")
 
         if asset is AssetClass.METAL and "DFII10" in changes:
             builder.note(
-                "real_yield_primary", "العائد الحقيقي هو المحرك الأساسي للذهب",
-                "تكلفة الفرصة البديلة لحيازة الذهب تُقاس بعائد السندات المحمية من التضخم",
+                "real_yield_primary", "Real yields are gold's primary driver",
+                "The opportunity cost of holding a zero-yield asset is the inflation-protected yield",
             )
 
         covered = sum(1 for sid in mapping if sid in changes)
@@ -99,15 +99,15 @@ class MacroEngine(Engine):
 
 
 _LABELS = {
-    "DFII10": "العائد الحقيقي 10 سنوات",
-    "DGS10": "عائد سندات الخزانة 10 سنوات",
-    "T10YIE": "توقعات التضخم 10 سنوات",
-    "DTWEXBGS": "مؤشر الدولار المرجّح تجارياً",
-    "VIXCLS": "مؤشر التقلب VIX",
-    "UNRATE": "معدل البطالة",
+    "DFII10": "10-year real yield",
+    "DGS10": "10-year Treasury yield",
+    "T10YIE": "10-year breakeven inflation",
+    "DTWEXBGS": "Trade-weighted dollar index",
+    "VIXCLS": "VIX volatility index",
+    "UNRATE": "Unemployment rate",
 }
 
 _UNITS = {
-    "DFII10": " نقطة مئوية", "DGS10": " نقطة مئوية", "T10YIE": " نقطة مئوية",
-    "DTWEXBGS": "%", "VIXCLS": "%", "UNRATE": " نقطة مئوية",
+    "DFII10": " pp", "DGS10": " pp", "T10YIE": " pp",
+    "DTWEXBGS": "%", "VIXCLS": "%", "UNRATE": " pp",
 }

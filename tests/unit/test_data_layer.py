@@ -96,7 +96,7 @@ def test_quality_flags_staleness(settings):
     stale_as_of = frame.index[-1].to_pydatetime() + pd.Timedelta(days=3)
     score, issues = quality.assess_timeframe(frame, Timeframe.H1, settings.data_quality, stale_as_of)
     assert score < 0.9
-    assert any("متأخرة" in issue for issue in issues)
+    assert any("stale" in issue for issue in issues)
 
 
 def test_quality_empty_frame_is_zero(settings):

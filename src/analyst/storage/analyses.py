@@ -25,7 +25,7 @@ def save_analysis(result: AnalysisResult, create_signal: bool = True) -> int:
     with session_scope() as session:
         row = Analysis(
             symbol=result.symbol,
-            name_ar=result.name_ar,
+            name=result.name,
             market=result.market.value,
             as_of=to_utc(result.as_of),
             spot=result.spot,
@@ -34,7 +34,7 @@ def save_analysis(result: AnalysisResult, create_signal: bool = True) -> int:
             grade=result.grade.value,
             regime=result.regime.value,
             actionable=result.is_actionable,
-            report_ar=result.report_ar,
+            report=result.report,
             payload=result.model_dump(mode="json"),
             config_version=result.config_version,
             code_version=result.code_version,

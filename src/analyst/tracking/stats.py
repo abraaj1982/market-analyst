@@ -53,16 +53,16 @@ class PerformanceStats:
         return self.sample >= MIN_SAMPLE
 
     @property
-    def headline_ar(self) -> str:
+    def headline(self) -> str:
         if not self.is_significant:
             return (
-                f"العينة {self.sample} صفقة محسومة فقط — أقل من الحد الأدنى "
-                f"({MIN_SAMPLE}) لأي استنتاج إحصائي. لا تُقرأ النسب بعد."
+                f"Only {self.sample} resolved trades — below the {MIN_SAMPLE} minimum "
+                "for any statistical read. Do not interpret the ratios yet."
             )
         lo, hi = self.win_rate_ci or (0.0, 0.0)
         return (
-            f"عبر {self.sample} صفقة محسومة: نسبة الإصابة {self.win_rate:.0%} "
-            f"(مجال ثقة 95%: {lo:.0%}–{hi:.0%}) · التوقّع {self.expectancy_r:+.2f}R لكل صفقة"
+            f"Across {self.sample} resolved trades: win rate {self.win_rate:.0%} "
+            f"(95% CI {lo:.0%}–{hi:.0%}) · expectancy {self.expectancy_r:+.2f}R per trade"
         )
 
 
