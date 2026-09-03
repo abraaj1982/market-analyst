@@ -8,12 +8,17 @@ via `POST /api/run`.
 """
 from __future__ import annotations
 
+import base64
+import hmac
 import logging
+import os
 from typing import Any
 
 from fastapi import Body, FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 from analyst.core.clock import now_utc, to_utc
 from analyst.core.config import WEB_DIR, active_instruments, load_settings
@@ -26,11 +31,42 @@ from analyst.version import code_version
 log = logging.getLogger(__name__)
 
 
+class _BasicAuthMiddleware(BaseHTTPMiddleware):
+    """Gate every route but /api/health behind HTTP Basic Auth.
+
+    Only installed when DASHBOARD_USER and DASHBOARD_PASSWORD are set, so a
+    local, non-deployed run stays unauthenticated exactly as before.
+    """
+
+    def __init__(self, app: FastAPI, username: str, password: str) -> None:
+        super().__init__(app)
+        self._username = username
+        self._password = password
+
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path == "/api/health":
+            return await call_next(request)
+        header = request.headers.get("authorization", "")
+        if header.startswith("Basic "):
+            try:
+                user, _, pwd = base64.b64decode(header[6:]).decode().partition(":")
+            except Exception:
+                user = pwd = ""
+            if hmac.compare_digest(user, self._username) and hmac.compare_digest(
+                pwd, self._password
+            ):
+                return await call_next(request)
+        return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="Market Analyst"'})
+
+
 def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
     settings = load_settings()
     init_db()
 
     app = FastAPI(title="Market Analyst", version=code_version(), docs_url="/api/docs")
+    dashboard_user, dashboard_password = os.getenv("DASHBOARD_USER"), os.getenv("DASHBOARD_PASSWORD")
+    if dashboard_user and dashboard_password:
+        app.add_middleware(_BasicAuthMiddleware, username=dashboard_user, password=dashboard_password)
     state: dict[str, Any] = {"service": None, "scheduler": None}
 
     @app.on_event("startup")
