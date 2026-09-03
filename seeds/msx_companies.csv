@@ -1,0 +1,10 @@
+symbol,name,sector,currency
+BKMB,Bank Muscat SAOG,Banking,OMR
+BKDB,Bank Dhofar SAOG,Banking,OMR
+BKSB,Sohar International Bank SAOG,Banking,OMR
+NBOB,National Bank of Oman SAOG,Banking,OMR
+OTEL,Oman Telecommunications Company SAOG (Omantel),Telecommunications,OMR
+ORDS,Oman Qatari Telecommunications SAOG (Ooredoo Oman),Telecommunications,OMR
+OMVS,Oman International Development and Investment Co SAOG (Ominvest),Investment,OMR
+RCCI,Raysut Cement Company SAOG,Materials,OMR
+VOES,Voltamp Energy SAOG,Industrial,OMR

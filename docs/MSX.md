@@ -21,6 +21,21 @@ Rather than produce a fake analysis, it offers a **manual company register** —
 available in the dashboard under the *Companies* tab, and from the CLI under
 `analyst company`.
 
+A starter seed of nine large, liquid MSX names (banks, telecoms, cement,
+investment, industrial — symbols verified against MSX's own site and
+independent data vendors) ships at `seeds/msx_companies.csv`. Load it in one
+shot instead of adding companies one at a time:
+
+```bash
+python scripts/import_companies.py seeds/msx_companies.csv
+```
+
+The CSV only carries `symbol,name,sector,currency` — add rows for any other
+MSX company you want covered, or extend a row with the optional numeric
+fields (`price`, `dividend_per_share`, `eps`, ...) once you have them; see
+`scripts/import_companies.py` for the full column list. `analyst company add`
+still works for one-off entries or edits after the bulk load.
+
 You supply what is actually obtainable:
 
 * **Published figures** — price, dividend per share, EPS, book value, leverage
