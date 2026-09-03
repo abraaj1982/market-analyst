@@ -22,6 +22,7 @@ from analyst.core.config import (
     reset_caches,
 )
 from analyst.core.enums import Direction, Grade
+from analyst.data.context import DERIVED_FROM as DERIVED_TIMEFRAMES
 from analyst.logging_setup import configure as configure_logging
 from analyst.storage.db import init_db
 from analyst.tracking import stats as stats_module
@@ -206,12 +207,27 @@ def status() -> None:
         for tf in settings.active_profile.timeframes:
             if tf not in instrument.supported_timeframes:
                 continue
+            if tf in DERIVED_TIMEFRAMES:
+                # Derived frames are rebuilt from their base on demand, so an
+                # empty candle store for them is expected, not a gap in coverage.
+                base = DERIVED_TIMEFRAMES[tf]
+                count, newest = repo.coverage(instrument.symbol, base)
+                table.add_row(
+                    instrument.symbol, instrument.market.value, tf.value,
+                    f"[dim]مُشتق من {base.arabic}[/dim]",
+                    f"{newest:%Y-%m-%d %H:%M}" if newest is not None else "—",
+                )
+                continue
             count, newest = repo.coverage(instrument.symbol, tf)
             table.add_row(
                 instrument.symbol, instrument.market.value, tf.value, str(count),
                 f"{newest:%Y-%m-%d %H:%M}" if newest is not None else "—",
             )
     console.print(table)
+    console.print(
+        "[dim]الفريمات المُشتقة تُبنى بإعادة تجميع الفريم الأدنى عند كل تحليل، "
+        "ولذلك لا تُخزَّن.[/dim]"
+    )
 
 
 @app.command("init-db")
