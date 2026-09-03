@@ -6,7 +6,7 @@ venv/
 !.env.example
 
 # Local data (never committed - it grows without bound)
-data/
+/data/
 *.db
 *.db-wal
 *.db-shm
