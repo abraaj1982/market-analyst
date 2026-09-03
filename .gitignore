@@ -1,0 +1,37 @@
+# البيئة والأسرار
+.venv/
+venv/
+.env
+*.env
+!.env.example
+
+# البيانات المحلية (لا تُرفع أبداً — قد تكبر كثيراً)
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+
+# مخرجات مؤقتة
+*.json
+!package.json
+analysis*.json
+report*.txt
+*.log
+
+# بايثون
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# محررات وأنظمة
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

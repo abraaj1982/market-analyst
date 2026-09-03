@@ -1,0 +1,77 @@
+# ============================================================================
+#  التقويم الاقتصادي — بدون اشتراك مدفوع
+#
+#  الأحداث المتكررة (NFP، CPI، PPI) يولّدها النظام تلقائياً بقواعد زمنية.
+#  اجتماعات الفيدرالي (FOMC) لا تتبع قاعدة ثابتة → تُكتب يدوياً مرة واحدة سنوياً
+#  من الموقع الرسمي: federalreserve.gov/monetarypolicy/fomccalendars.htm
+#
+#  كل الأوقات UTC. تحديث هذا الملف = دقيقتان في بداية كل سنة.
+# ============================================================================
+
+# ---- قواعد الأحداث المتكررة ----
+recurring:
+  - id: NFP
+    label_ar: "تقرير الوظائف الأمريكية (NFP)"
+    impact: high
+    currency: USD
+    rule: first_friday          # أول جمعة من كل شهر
+    time_utc: "13:30"
+
+  - id: CPI
+    label_ar: "مؤشر أسعار المستهلك الأمريكي (CPI)"
+    impact: high
+    currency: USD
+    rule: nth_weekday           # ثاني أربعاء تقريبياً — راجع التواريخ الدقيقة أدناه
+    nth: 2
+    weekday: 2                  # 0=الاثنين ... 6=الأحد
+    time_utc: "13:30"
+
+  - id: PPI
+    label_ar: "مؤشر أسعار المنتجين (PPI)"
+    impact: medium
+    currency: USD
+    rule: nth_weekday
+    nth: 2
+    weekday: 3
+    time_utc: "13:30"
+
+  - id: JOBLESS
+    label_ar: "طلبات إعانة البطالة الأسبوعية"
+    impact: low
+    currency: USD
+    rule: weekly
+    weekday: 3                  # الخميس
+    time_utc: "13:30"
+
+  - id: RETAIL
+    label_ar: "مبيعات التجزئة الأمريكية"
+    impact: medium
+    currency: USD
+    rule: nth_weekday
+    nth: 3
+    weekday: 2
+    time_utc: "13:30"
+
+# ---- أحداث محددة بتواريخ (حدّثها سنوياً) ----
+# قرار الفائدة يصدر 18:00 UTC والمؤتمر الصحفي 18:30 UTC
+fixed:
+  - id: FOMC
+    label_ar: "قرار الفائدة الأمريكي + المؤتمر الصحفي (FOMC)"
+    impact: high
+    currency: USD
+    datetimes_utc:
+      - "2026-01-28 19:00"
+      - "2026-03-18 18:00"
+      - "2026-04-29 18:00"
+      - "2026-06-17 18:00"
+      - "2026-07-29 18:00"
+      - "2026-09-16 18:00"
+      - "2026-11-04 19:00"
+      - "2026-12-16 19:00"
+
+  - id: JACKSON_HOLE
+    label_ar: "ندوة جاكسون هول"
+    impact: high
+    currency: USD
+    datetimes_utc:
+      - "2026-08-21 14:00"

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>محلل الأسواق</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1117'/%3E%3Cpath d='M6 22l6-8 5 5 9-11' stroke='%234a9eff' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">◆</span>
+    <div>
+      <h1>محلل الأسواق</h1>
+      <p class="sub" id="profileLine">جارٍ التحميل…</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <span class="pill" id="clock">—</span>
+    <button id="runBtn" class="btn">تشغيل تحليل الآن</button>
+    <button id="refreshBtn" class="btn ghost">تحديث</button>
+  </div>
+</header>
+
+<main>
+  <section class="kpis" id="kpis"></section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>قائمة المتابعة</h2>
+      <div class="filters">
+        <label class="switch"><input type="checkbox" id="onlyActionable"><span>الفرص المؤهلة فقط</span></label>
+        <input type="search" id="search" placeholder="بحث عن رمز…">
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table id="table">
+        <thead>
+          <tr>
+            <th data-sort="symbol">الرمز</th>
+            <th data-sort="direction">الاتجاه</th>
+            <th data-sort="confidence">درجة الثقة</th>
+            <th data-sort="grade">التصنيف</th>
+            <th data-sort="regime">حالة السوق</th>
+            <th data-sort="coverage_ratio">التغطية</th>
+            <th data-sort="spot">السعر</th>
+            <th>الحالة</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="detailPanel" hidden>
+    <div class="panel-head">
+      <h2 id="detailTitle">—</h2>
+      <div class="tf-buttons" id="tfButtons"></div>
+    </div>
+    <div id="chart" class="chart"></div>
+    <div class="detail-grid">
+      <div>
+        <h3>مساهمة المحركات</h3>
+        <div id="contributions" class="contrib"></div>
+      </div>
+      <div>
+        <h3>البوابات الصلبة</h3>
+        <ul id="gates" class="gates"></ul>
+      </div>
+    </div>
+    <details class="report">
+      <summary>التقرير الكامل</summary>
+      <pre id="report"></pre>
+    </details>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>أداء التتبّع الأمامي</h2></div>
+    <div id="stats" class="stats"></div>
+    <p class="disclaimer">
+      هذه أرقام من إشارات سُجّلت بمستوياتها <b>قبل</b> معرفة النتيجة، وليست backtest.
+      لا يعرض النظام نسبة إصابة قبل اكتمال 30 صفقة محسومة على الأقل.
+    </p>
+  </section>
+</main>
+
+<footer>
+  <span>تحليل آلي لجودة الإعداد — ليس توصية استثمارية ولا وعداً بنتيجة.</span>
+  <span id="version"></span>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.1.3/lightweight-charts.standalone.production.js"></script>
+<script src="/assets/app.js"></script>
+</body>
+</html>

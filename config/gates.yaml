@@ -1,0 +1,54 @@
+# ============================================================================
+#  البوابات الصلبة — شروط منطقية إلزامية منفصلة عن درجة الثقة.
+#  درجة 95% مع بوابة ساقطة = لا صفقة. هذا مقصود.
+# ============================================================================
+gates:
+  - id: data_quality
+    label_ar: "جودة البيانات كافية"
+    blocking: true
+    params: { min_score: 0.70 }
+
+  - id: mtf_alignment
+    label_ar: "توافق الاتجاه على الفريمين الأعلى"
+    blocking: true
+    params: { timeframes: ["1d", "4h"] }
+
+  - id: min_confidence
+    label_ar: "درجة الثقة تتجاوز حد الفرصة"
+    blocking: true
+    params: { min_confidence: 0.60 }
+
+  - id: risk_reward
+    label_ar: "نسبة العائد للمخاطرة مقبولة"
+    blocking: true
+    params: { min_rr: 1.8 }
+
+  - id: news_blackout
+    label_ar: "لا خبر عالي الأثر في نافذة الحظر"
+    blocking: true
+    params: { minutes_before: 60, minutes_after: 30 }
+
+  - id: engine_coverage
+    label_ar: "عدد كافٍ من المحركات شارك في القرار"
+    blocking: true
+    params: { min_active_engines: 3, min_effective_weight: 0.35 }
+
+  - id: not_against_higher_trend
+    label_ar: "الإشارة لا تعاكس الاتجاه اليومي الكبير"
+    blocking: false
+    params: { timeframe: "1d" }
+
+  - id: shortable
+    label_ar: "الاتجاه قابل للتنفيذ في هذا السوق"
+    blocking: true
+    params: {}
+
+  - id: earnings_blackout
+    label_ar: "لا إعلان أرباح وشيك"
+    blocking: true
+    params: { days_before: 2, days_after: 1 }
+
+  - id: volatility_sane
+    label_ar: "التقلب ضمن نطاق قابل للتداول"
+    blocking: false
+    params: { min_atr_percentile: 0.10, max_atr_percentile: 0.95 }
