@@ -19,3 +19,8 @@ class AIProvider(Protocol):
     def complete(self, system: str, user: str) -> str:
         """Send a system + user prompt, return the raw text response."""
         ...
+
+    def chat(self, system: str, messages: list[dict]) -> str:
+        """Send a system prompt plus a multi-turn conversation (each item
+        `{"role": "user"|"assistant", "content": str}`), return the reply."""
+        ...

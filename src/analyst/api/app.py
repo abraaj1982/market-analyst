@@ -140,6 +140,20 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
 
         return get_or_generate(symbol)
 
+    @app.post("/api/analysis/{symbol}/ai/chat")
+    def analysis_ai_chat(symbol: str, payload: dict = Body(...)) -> dict:
+        """One turn of a chat about the latest stored analysis.
+
+        Unlike the AI read above, this is never cached -- every message is
+        its own API call, same as any chat. `history` (the prior turns of
+        this conversation, tracked client-side) is optional.
+        """
+        from analyst.ai import chat_about_analysis
+
+        message = payload.get("message", "")
+        history = payload.get("history") or []
+        return chat_about_analysis(symbol, message, history)
+
     @app.get("/api/analysis/{symbol}/timeframe/{timeframe}")
     def analysis_at_timeframe(symbol: str, timeframe: str) -> dict:
         """A live analysis anchored on one chart timeframe -- its own

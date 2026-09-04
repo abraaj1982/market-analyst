@@ -28,6 +28,9 @@ class ClaudeProvider:
         return bool(self.api_key)
 
     def complete(self, system: str, user: str) -> str:
+        return self.chat(system, [{"role": "user", "content": user}])
+
+    def chat(self, system: str, messages: list[dict]) -> str:
         if not self.configured:
             raise AIProviderError("ANTHROPIC_API_KEY is not set")
         try:
@@ -42,7 +45,7 @@ class ClaudeProvider:
                     "model": self.model,
                     "max_tokens": 1200,
                     "system": system,
-                    "messages": [{"role": "user", "content": user}],
+                    "messages": messages,
                 },
                 timeout=self.timeout,
             )

@@ -181,3 +181,84 @@ def get_or_generate(symbol: str, provider: AIProvider | None = None) -> dict:
         session.add(row)
 
         return {"status": "ok", **interpretation}
+
+
+_CHAT_SYSTEM_PROMPT = """You are a market analysis assistant for a personal, single-user \
+decision-support tool. The user is looking at one instrument's analysis and may ask you \
+follow-up questions about it. You are given a JSON object of facts already computed by \
+deterministic code (direction, confidence, per-engine evidence, gates, risk levels) -- \
+that JSON is everything you know. You do not calculate anything yourself and you have no \
+prices or facts beyond what is in it; if a question needs something not in there, say so \
+plainly rather than inventing it.
+
+Rules:
+- Never call anything "guaranteed", "certain", or "risk-free". Use "potential", "bias", \
+"scenario", "setup detected".
+- Stay on this instrument's analysis. If asked something unrelated (other symbols, general \
+trading advice, anything outside the JSON), say you can only discuss the analysis shown.
+- Keep answers short -- a few sentences, not a report. This is a chat, not another
+generated write-up.
+- This is not financial advice, and you are not making the trade decision -- the user is."""
+
+_MAX_CHAT_MESSAGE_CHARS = 1000
+_MAX_CHAT_HISTORY_TURNS = 12
+
+
+def chat_about_analysis(
+    symbol: str, message: str, history: list[dict] | None = None,
+    provider: AIProvider | None = None,
+) -> dict:
+    """One turn of a conversation about the latest stored analysis.
+
+    Unlike `get_or_generate`, this is never cached -- each question is a
+    fresh API call by design, same as any chat. `history` is the prior
+    turns of *this* conversation as the caller (the dashboard) tracked
+    them; nothing is persisted server-side.
+    """
+    provider = provider or ClaudeProvider()
+    message = (message or "").strip()
+    if not message:
+        return {"status": "error", "message": "Message is empty."}
+    if len(message) > _MAX_CHAT_MESSAGE_CHARS:
+        return {"status": "error", "message": "Message is too long."}
+
+    with session_scope() as session:
+        row = session.execute(
+            select(Analysis).where(Analysis.symbol == symbol.upper())
+            .order_by(Analysis.as_of.desc()).limit(1)
+        ).scalars().first()
+        if row is None:
+            return {"status": "no_analysis", "message": f"No stored analysis for {symbol.upper()}"}
+
+        if not getattr(provider, "configured", True):
+            return {
+                "status": "not_configured",
+                "message": "Set ANTHROPIC_API_KEY to turn on the AI analyst.",
+            }
+
+        facts = build_facts(row)
+
+    turns = [
+        {"role": t["role"], "content": str(t["content"])[:_MAX_CHAT_MESSAGE_CHARS]}
+        for t in (history or [])
+        if t.get("role") in ("user", "assistant") and t.get("content")
+    ][-_MAX_CHAT_HISTORY_TURNS:]
+
+    if not turns:
+        # first turn of the conversation: ground it in the facts
+        turns = [{
+            "role": "user",
+            "content": "Here are the facts for this instrument:\n\n" + json.dumps(facts, indent=2),
+        }, {
+            "role": "assistant",
+            "content": "Understood — I'll answer your questions using only these facts.",
+        }]
+    turns.append({"role": "user", "content": message})
+
+    try:
+        reply = provider.chat(_CHAT_SYSTEM_PROMPT, turns)
+    except AIProviderError as exc:
+        log.warning("AI chat failed for %s: %s", symbol, exc)
+        return {"status": "error", "message": str(exc)}
+
+    return {"status": "ok", "reply": reply}

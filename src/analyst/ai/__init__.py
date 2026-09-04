@@ -7,6 +7,6 @@ other way around).
 """
 from __future__ import annotations
 
-from analyst.ai.interpreter import AIInterpretation, get_or_generate
+from analyst.ai.interpreter import AIInterpretation, chat_about_analysis, get_or_generate
 
-__all__ = ["AIInterpretation", "get_or_generate"]
+__all__ = ["AIInterpretation", "chat_about_analysis", "get_or_generate"]

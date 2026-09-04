@@ -22,6 +22,7 @@ const State = {
   selectedCompany: null,
   indicatorSeries: {},
   indicatorsOn: { ma: true, supertrend: false, ichimoku: false, macd: false },
+  chatHistory: [],
 };
 
 const $ = (id) => document.getElementById(id);
@@ -202,6 +203,8 @@ async function selectSymbol(symbol) {
   renderTable();
   $("aiPanel").innerHTML = "";
   $("aiBtn").textContent = "Generate AI read";
+  State.chatHistory = [];
+  $("aiChatLog").innerHTML = "";
   const cached = State.rows.find((r) => r.symbol === symbol);
   if (cached) renderDetail(cached); // instant paint from the swing snapshot
   await loadTimeframeAnalysis(symbol, State.timeframe);
@@ -454,6 +457,45 @@ function renderAI(r) {
         guarantee of any outcome. Cross-check against "Read by school" before acting on it.
       </div>
     </div>`;
+}
+
+function appendChatMessage(role, text, pending) {
+  const log = $("aiChatLog");
+  const el = document.createElement("div");
+  el.className = `ai-chat-msg ${role}${pending ? " pending" : ""}`;
+  el.textContent = text;
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+
+async function sendChatMessage(text) {
+  const symbol = State.selected;
+  if (!symbol || !text.trim()) return;
+
+  appendChatMessage("user", text);
+  const pending = appendChatMessage("assistant", "Thinking…", true);
+
+  try {
+    const r = await postJson(`/api/analysis/${symbol}/ai/chat`, {
+      message: text, history: State.chatHistory,
+    });
+    if (r.status === "ok") {
+      pending.textContent = r.reply;
+      pending.classList.remove("pending");
+      State.chatHistory.push({ role: "user", content: text });
+      State.chatHistory.push({ role: "assistant", content: r.reply });
+    } else if (r.status === "not_configured") {
+      pending.textContent = "AI analyst is not turned on for this deployment (no ANTHROPIC_API_KEY set).";
+      pending.classList.remove("pending");
+    } else {
+      pending.textContent = r.message || "Could not get a reply — try again.";
+      pending.classList.remove("pending");
+    }
+  } catch {
+    pending.textContent = "Could not reach the AI analyst.";
+    pending.classList.remove("pending");
+  }
 }
 
 function renderGates(gates, container) {
@@ -821,6 +863,13 @@ document.querySelectorAll(".tab").forEach((tab) =>
 
 $("refreshBtn").addEventListener("click", refresh);
 $("aiBtn").addEventListener("click", () => { if (State.selected) loadAI(State.selected); });
+$("aiChatForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const input = $("aiChatInput");
+  const text = input.value;
+  input.value = "";
+  sendChatMessage(text);
+});
 $("search").addEventListener("input", renderTable);
 $("onlyActionable").addEventListener("change", renderTable);
 document.querySelectorAll("thead th[data-sort]").forEach((th) =>

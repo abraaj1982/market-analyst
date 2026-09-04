@@ -10,7 +10,7 @@ import json
 
 import pandas as pd
 
-from analyst.ai.interpreter import build_facts, get_or_generate, parse_response
+from analyst.ai.interpreter import build_facts, chat_about_analysis, get_or_generate, parse_response
 from analyst.ai.provider import AIProviderError
 from analyst.storage.analyses import save_analysis
 from tests.conftest import ANCHOR
@@ -46,11 +46,21 @@ class FakeProvider:
             raise AIProviderError("simulated failure")
         return self.text
 
+    def chat(self, system: str, messages: list[dict]) -> str:
+        self.calls += 1
+        self.last_messages = messages
+        if self.raise_error:
+            raise AIProviderError("simulated failure")
+        return self.text
+
 
 class NotConfiguredProvider:
     configured = False
 
     def complete(self, system: str, user: str) -> str:  # pragma: no cover - never called
+        raise AssertionError("must not be called when not configured")
+
+    def chat(self, system: str, messages: list[dict]) -> str:  # pragma: no cover - never called
         raise AssertionError("must not be called when not configured")
 
 
@@ -127,4 +137,59 @@ def test_get_or_generate_regenerates_after_a_new_analysis(pipeline, gold):
 def test_get_or_generate_surfaces_provider_errors(pipeline, gold):
     save_analysis(pipeline.analyse(gold, as_of=ANCHOR.to_pydatetime()))
     result = get_or_generate("XAUUSD", provider=FakeProvider(raise_error=True))
+    assert result["status"] == "error"
+
+
+# --------------------------------------------------------------------- chat
+
+
+def test_chat_without_a_key_reports_not_configured(pipeline, gold):
+    save_analysis(pipeline.analyse(gold, as_of=ANCHOR.to_pydatetime()))
+    result = chat_about_analysis("XAUUSD", "why?", provider=NotConfiguredProvider())
+    assert result["status"] == "not_configured"
+
+
+def test_chat_with_no_stored_analysis():
+    result = chat_about_analysis("NOPE", "why?", provider=FakeProvider())
+    assert result["status"] == "no_analysis"
+
+
+def test_chat_rejects_an_empty_message(pipeline, gold):
+    save_analysis(pipeline.analyse(gold, as_of=ANCHOR.to_pydatetime()))
+    result = chat_about_analysis("XAUUSD", "   ", provider=FakeProvider())
+    assert result["status"] == "error"
+
+
+def test_chat_first_turn_grounds_the_conversation_in_the_facts(pipeline, gold):
+    save_analysis(pipeline.analyse(gold, as_of=ANCHOR.to_pydatetime()))
+    provider = FakeProvider(text="Confidence is low because the timeframes disagree.")
+
+    result = chat_about_analysis("XAUUSD", "Why is confidence low?", provider=provider)
+
+    assert result["status"] == "ok"
+    assert result["reply"] == provider.text
+    # the facts must actually have been sent, not just a bare question
+    assert any("XAUUSD" in m["content"] for m in provider.last_messages)
+    assert provider.last_messages[-1] == {"role": "user", "content": "Why is confidence low?"}
+
+
+def test_chat_with_history_does_not_regroup_the_facts(pipeline, gold):
+    save_analysis(pipeline.analyse(gold, as_of=ANCHOR.to_pydatetime()))
+    provider = FakeProvider(text="Sure, here's more detail.")
+    history = [
+        {"role": "user", "content": "Why is confidence low?"},
+        {"role": "assistant", "content": "The timeframes disagree."},
+    ]
+
+    result = chat_about_analysis("XAUUSD", "Say more", history=history, provider=provider)
+
+    assert result["status"] == "ok"
+    # continuing an existing conversation must not re-inject the facts dump
+    assert not any("top_evidence" in m["content"] for m in provider.last_messages)
+    assert provider.last_messages[-1] == {"role": "user", "content": "Say more"}
+
+
+def test_chat_surfaces_provider_errors(pipeline, gold):
+    save_analysis(pipeline.analyse(gold, as_of=ANCHOR.to_pydatetime()))
+    result = chat_about_analysis("XAUUSD", "why?", provider=FakeProvider(raise_error=True))
     assert result["status"] == "error"
