@@ -128,6 +128,8 @@ tbody tr:last-child { border-bottom: 0; }
 
 /* ------------------------------------------------------------------ detail */
 .chart { height: 380px; width: 100%; }
+.chart-lg { height: 460px; }
+.chart-controls { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .tf-buttons { display: flex; gap: 6px; }
 .tf-btn {
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim);
@@ -146,12 +148,44 @@ tbody tr:last-child { border-bottom: 0; }
 .verdict-banner.wait { border-left-color: var(--neutral); }
 .verdict-banner.wait .headline { color: var(--text-dim); }
 
-.ind-toggles { display: flex; gap: 8px; padding: 0 18px 12px; }
+.ind-toggles { display: flex; gap: 8px; }
 .ind-btn {
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim);
   padding: 5px 12px; border-radius: var(--radius); font-family: var(--font); font-size: 12px; cursor: pointer;
 }
 .ind-btn.active { background: rgba(74,158,255,.16); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+/* -------------------------------------------------------------- trade plan */
+.trade-plan {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 1px; background: var(--border); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+}
+.trade-plan .cell { background: var(--surface); padding: 14px 16px; }
+.trade-plan .cell .label { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+.trade-plan .cell .value { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.trade-plan .cell.entry .value { color: var(--accent); }
+.trade-plan .cell.stop .value { color: var(--bear); }
+.trade-plan .cell.tp .value { color: var(--bull); }
+.trade-plan.empty { grid-template-columns: 1fr; }
+.trade-plan.empty .cell { color: var(--text-dim); font-size: 13px; text-align: center; }
+
+/* ---------------------------------------------------------------- schools */
+.schools-head { padding: 18px 18px 0; }
+.schools-head h3 { margin: 0; font-size: 13px; color: var(--text-dim); font-weight: 500; }
+.schools-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px; padding: 14px 18px 18px;
+}
+.school-card {
+  background: var(--surface-2); border-radius: var(--radius); padding: 13px 15px;
+  border-left: 3px solid var(--neutral);
+}
+.school-card.bull { border-left-color: var(--bull); }
+.school-card.bear { border-left-color: var(--bear); }
+.school-card .school-name { font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+.school-card .school-read { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.school-card .school-detail { font-size: 12px; color: var(--text-dim); margin-top: 5px; line-height: 1.4; }
+.school-card.skipped { opacity: .6; }
 
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; padding: 18px; border-top: 1px solid var(--border); }
 .detail-grid h3 { margin: 0 0 12px; font-size: 13px; color: var(--text-dim); font-weight: 500; }
@@ -168,13 +202,14 @@ tbody tr:last-child { border-bottom: 0; }
 .gates li:last-child { border-bottom: 0; }
 .gates .detail { color: var(--text-dim); font-size: 11px; display: block; }
 
-.report { border-top: 1px solid var(--border); }
-.report summary { padding: 12px 18px; cursor: pointer; color: var(--text-dim); font-size: 13px; }
-.report summary:hover { color: var(--text); }
-.report pre {
+.report, .advanced { border-top: 1px solid var(--border); }
+.report summary, .advanced summary { padding: 12px 18px; cursor: pointer; color: var(--text-dim); font-size: 13px; }
+.report summary:hover, .advanced summary:hover { color: var(--text); }
+.report pre, .advanced pre {
   margin: 0; padding: 0 18px 18px; white-space: pre-wrap; word-break: break-word;
   font-family: var(--font); font-size: 13px; line-height: 1.9; color: var(--text);
 }
+.advanced .detail-grid { border-top: 1px solid var(--border); }
 
 /* ------------------------------------------------------------------- stats */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; padding: 18px; }

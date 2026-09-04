@@ -65,26 +65,34 @@
     <section class="panel" id="detailPanel" hidden>
       <div class="panel-head">
         <h2 id="detailTitle">—</h2>
-        <div class="tf-buttons" id="tfButtons"></div>
+        <div class="chart-controls">
+          <div class="tf-buttons" id="tfButtons"></div>
+          <div class="ind-toggles" id="indToggles">
+            <button class="ind-btn" data-ind="ma">Moving average</button>
+            <button class="ind-btn" data-ind="ichimoku">Ichimoku</button>
+          </div>
+        </div>
       </div>
+      <div id="chart" class="chart chart-lg"></div>
+
+      <div id="tradePlan" class="trade-plan"></div>
       <div id="verdictBanner" class="verdict-banner"></div>
-      <div class="ind-toggles" id="indToggles">
-        <button class="ind-btn" data-ind="ma">Moving averages</button>
-        <button class="ind-btn" data-ind="ichimoku">Ichimoku</button>
-      </div>
-      <div id="chart" class="chart"></div>
-      <div class="detail-grid">
-        <div>
-          <h3>Engine contributions</h3>
-          <div id="contributions" class="contrib"></div>
+
+      <div class="schools-head"><h3>Read by school</h3></div>
+      <div id="schools" class="schools-grid"></div>
+
+      <details class="advanced">
+        <summary>Advanced analysis — engine weights, hard gates, full report</summary>
+        <div class="detail-grid">
+          <div>
+            <h3>Engine contributions</h3>
+            <div id="contributions" class="contrib"></div>
+          </div>
+          <div>
+            <h3>Hard gates</h3>
+            <ul id="gates" class="gates"></ul>
+          </div>
         </div>
-        <div>
-          <h3>Hard gates</h3>
-          <ul id="gates" class="gates"></ul>
-        </div>
-      </div>
-      <details class="report">
-        <summary>Full report</summary>
         <pre id="report"></pre>
       </details>
     </section>

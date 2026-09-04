@@ -241,7 +241,9 @@ function renderDetail(row) {
     b.addEventListener("click", () => { State.timeframe = b.dataset.tf; renderDetail(row); loadChart(row.symbol); loadIndicators(row.symbol); })
   );
 
+  renderTradePlan(row);
   renderVerdict(row);
+  renderSchools(row);
   contributionBars(row.contributions || [], $("contributions"));
 
   document.querySelectorAll(".ind-btn").forEach((b) => {
@@ -260,7 +262,7 @@ function renderVerdict(row) {
   if (row.actionable) {
     el.className = "verdict-banner go";
     el.innerHTML = `<div class="headline">✅ TRADE — ${dir.label}, ${fmtPct(row.confidence)} confidence</div>
-      <div>Every hard gate passed and the timeframes agree. See "Full report" below for the entry, stop and targets.</div>`;
+      <div>Every hard gate passed and the timeframes agree.</div>`;
     return;
   }
   el.className = "verdict-banner wait";
@@ -269,6 +271,60 @@ function renderVerdict(row) {
     : "confidence is too low relative to the setup";
   el.innerHTML = `<div class="headline">⏳ WAIT — ${dir.label} lean, but not tradeable (${fmtPct(row.confidence)} confidence)</div>
     <div>${escapeHtml(reason)}</div>`;
+}
+
+function renderTradePlan(row) {
+  const el = $("tradePlan");
+  const r = row.risk;
+  if (!r) {
+    el.className = "trade-plan empty";
+    el.innerHTML = `<div class="cell">No trade plan yet — this setup is not tradeable (see WAIT reason below).</div>`;
+    return;
+  }
+  el.className = "trade-plan";
+  const cells = [
+    ["entry", "Entry", fmtNum(r.entry)],
+    ["stop", "Stop loss", fmtNum(r.stop_loss)],
+    ["tp", "Take profit 1", fmtNum(r.take_profit_1)],
+  ];
+  if (r.take_profit_2 !== null && r.take_profit_2 !== undefined) {
+    cells.push(["tp", "Take profit 2", fmtNum(r.take_profit_2)]);
+  }
+  cells.push(["", "Risk : reward", r.risk_reward ? `1 : ${r.risk_reward.toFixed(2)}` : "—"]);
+  el.innerHTML = cells.map(([cls, label, value]) =>
+    `<div class="cell ${cls}"><div class="label">${label}</div><div class="value">${value}</div></div>`
+  ).join("");
+}
+
+function renderSchools(row) {
+  const el = $("schools");
+  const engines = row.engines || [];
+  if (!engines.length) {
+    el.innerHTML = `<div class="notice">No engine detail available for this analysis.</div>`;
+    return;
+  }
+  el.innerHTML = engines.map((e) => {
+    const name = ENGINE_LABELS[e.engine] || e.engine;
+    if (e.skipped_reason) {
+      return `<div class="school-card skipped">
+        <div class="school-name">${name}</div>
+        <div class="school-read">— Stood aside</div>
+        <div class="school-detail">${escapeHtml(e.skipped_reason)}</div>
+      </div>`;
+    }
+    const dir = DIRECTION[String(e.direction)] || DIRECTION[0];
+    const top = (e.evidence || []).slice().sort(
+      (a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)
+    )[0];
+    const detail = top
+      ? (top.detail ? `${top.label} — ${top.detail}` : top.label)
+      : (e.notes && e.notes[0]) || "";
+    return `<div class="school-card ${dir.cls}">
+      <div class="school-name">${name}</div>
+      <div class="school-read">${dir.icon} ${dir.label}</div>
+      <div class="school-detail">${escapeHtml(detail)}</div>
+    </div>`;
+  }).join("");
 }
 
 function renderGates(gates, container) {
