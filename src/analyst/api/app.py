@@ -128,6 +128,18 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
         row = rows[0]
         return {**_summarise(row), "report": row.report, "payload": row.payload}
 
+    @app.get("/api/analysis/{symbol}/ai")
+    def analysis_ai(symbol: str) -> dict:
+        """The AI analyst's plain-language read of the latest stored analysis.
+
+        Generated on demand and cached against that analysis's `as_of` --
+        opening this repeatedly, or the dashboard's periodic refresh, does not
+        spend another API call until a new analysis has actually landed.
+        """
+        from analyst.ai import get_or_generate
+
+        return get_or_generate(symbol)
+
     @app.get("/api/history/{symbol}")
     def history(symbol: str, limit: int = Query(200, le=1000)) -> list[dict]:
         return [

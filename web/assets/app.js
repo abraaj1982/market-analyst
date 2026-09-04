@@ -201,6 +201,8 @@ function renderTable() {
 async function selectSymbol(symbol) {
   State.selected = symbol;
   renderTable();
+  $("aiPanel").innerHTML = "";
+  $("aiBtn").textContent = "Generate AI read";
   const row = State.rows.find((r) => r.symbol === symbol);
   if (row) renderDetail(row);
   await loadReport(symbol);
@@ -325,6 +327,102 @@ function renderSchools(row) {
       <div class="school-detail">${escapeHtml(detail)}</div>
     </div>`;
   }).join("");
+}
+
+/* -------------------------------------------------------------- AI analyst */
+
+async function loadAI(symbol) {
+  const panel = $("aiPanel");
+  const btn = $("aiBtn");
+  btn.disabled = true;
+  btn.textContent = "Thinking…";
+  panel.innerHTML = "";
+  try {
+    const r = await api(`/api/analysis/${symbol}/ai`);
+    renderAI(r);
+  } catch {
+    panel.innerHTML = `<div class="notice">Could not reach the AI analyst.</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Regenerate";
+  }
+}
+
+function renderAI(r) {
+  const panel = $("aiPanel");
+  if (r.status === "not_configured") {
+    panel.innerHTML = `<div class="notice">AI analyst is not turned on for this deployment
+      (no <code>ANTHROPIC_API_KEY</code> set) — everything else on the dashboard works without it.</div>`;
+    return;
+  }
+  if (r.status === "no_analysis") {
+    panel.innerHTML = `<div class="notice">No stored analysis to interpret yet.</div>`;
+    return;
+  }
+  if (r.status === "error") {
+    panel.innerHTML = `<div class="notice">AI request failed: ${escapeHtml(r.message || "unknown error")}</div>`;
+    return;
+  }
+
+  const list = (items) => (items || []).length
+    ? `<ul>${items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`
+    : `<p>—</p>`;
+
+  panel.innerHTML = `
+    <div class="ai-block">
+      <div class="ai-bias">🤖 ${escapeHtml(r.market_bias || "—")}</div>
+
+      <div class="ai-section">
+        <div class="ai-label">Main reason</div>
+        <p>${escapeHtml(r.main_reason || "—")}</p>
+      </div>
+
+      <div class="ai-section">
+        <div class="ai-label">Supporting evidence</div>
+        ${list(r.supporting_evidence)}
+      </div>
+
+      <div class="ai-scenarios">
+        <div class="ai-scenario bull">
+          <div class="ai-label">Bullish scenario</div>
+          <p>${escapeHtml(r.bullish_scenario || "—")}</p>
+        </div>
+        <div class="ai-scenario bear">
+          <div class="ai-label">Bearish scenario</div>
+          <p>${escapeHtml(r.bearish_scenario || "—")}</p>
+        </div>
+      </div>
+
+      <div class="ai-section">
+        <div class="ai-label">Key levels</div>
+        ${list(r.key_levels)}
+      </div>
+
+      <div class="ai-section">
+        <div class="ai-label">Invalidation</div>
+        <p>${escapeHtml(r.invalidation_condition || "—")}</p>
+      </div>
+
+      <div class="ai-section">
+        <div class="ai-label">Risk warnings</div>
+        ${list(r.risk_warnings)}
+      </div>
+
+      <div class="ai-section">
+        <div class="ai-label">Conflicting evidence</div>
+        ${list(r.conflicting_evidence)}
+      </div>
+
+      <div class="ai-section">
+        <div class="ai-label">Summary</div>
+        <p>${escapeHtml(r.final_summary || "—")}</p>
+      </div>
+
+      <div class="ai-disclaimer">
+        AI-generated interpretation of the analysis above — not financial advice, and not a
+        guarantee of any outcome. Cross-check against "Read by school" before acting on it.
+      </div>
+    </div>`;
 }
 
 function renderGates(gates, container) {
@@ -621,6 +719,7 @@ document.querySelectorAll(".tab").forEach((tab) =>
 );
 
 $("refreshBtn").addEventListener("click", refresh);
+$("aiBtn").addEventListener("click", () => { if (State.selected) loadAI(State.selected); });
 $("search").addEventListener("input", renderTable);
 $("onlyActionable").addEventListener("change", renderTable);
 document.querySelectorAll("thead th[data-sort]").forEach((th) =>
