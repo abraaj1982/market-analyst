@@ -446,6 +446,15 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
         @app.get("/")
         def dashboard() -> FileResponse:
             return FileResponse(WEB_DIR / "index.html")
+
+        @app.get("/manifest.json")
+        def manifest() -> FileResponse:
+            return FileResponse(WEB_DIR / "manifest.json", media_type="application/manifest+json")
+
+        @app.get("/sw.js")
+        def service_worker() -> FileResponse:
+            # served from root, not /assets, so its scope covers the whole app
+            return FileResponse(WEB_DIR / "sw.js", media_type="application/javascript")
     else:
         @app.get("/")
         def missing() -> JSONResponse:
