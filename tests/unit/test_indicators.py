@@ -7,7 +7,16 @@ import pandas as pd
 import pytest
 
 from analyst.indicators.oscillators import bollinger, percentile_rank, rsi, stochastic
-from analyst.indicators.trend import adx, atr, atr_percent, ema, ichimoku, sma, true_range
+from analyst.indicators.trend import (
+    adx,
+    atr,
+    atr_percent,
+    ema,
+    ichimoku,
+    sma,
+    supertrend,
+    true_range,
+)
 from tests.conftest import make_frame
 
 
@@ -103,6 +112,31 @@ def test_percentile_rank_ends():
     assert float(percentile_rank(falling, 100).iloc[-1]) == pytest.approx(0.0)
 
 
+def test_supertrend_direction_follows_a_clean_trend():
+    rng = np.random.default_rng(3)
+    up = make_frame(100 + np.arange(150, dtype=float) * 0.6 + rng.normal(0, 0.3, 150))
+    down = make_frame(200 - np.arange(150, dtype=float) * 0.6 + rng.normal(0, 0.3, 150))
+
+    up_result = supertrend(up["high"], up["low"], up["close"])
+    down_result = supertrend(down["high"], down["low"], down["close"])
+
+    assert up_result["direction"].iloc[-1] == 1
+    assert down_result["direction"].iloc[-1] == -1
+
+
+def test_supertrend_line_sits_on_the_side_its_direction_claims():
+    rng = np.random.default_rng(5)
+    frame = make_frame(100 + np.cumsum(rng.normal(0, 1, 300)))
+    result = supertrend(frame["high"], frame["low"], frame["close"]).dropna()
+    close = frame["close"].loc[result.index]
+
+    bullish = result["direction"] == 1
+    # the line trails below price while bullish, above it while bearish --
+    # never a mid-trend contradiction of its own signal
+    assert (close[bullish] >= result.loc[bullish, "line"]).mean() > 0.95
+    assert (close[~bullish] <= result.loc[~bullish, "line"]).mean() > 0.95
+
+
 @pytest.mark.parametrize(
     "func",
     [
@@ -111,6 +145,7 @@ def test_percentile_rank_ends():
         lambda f: ema(f["close"], 20),
         lambda f: ichimoku(f["high"], f["low"], f["close"])["cloud_top"],
         lambda f: adx(f["high"], f["low"], f["close"])["adx"],
+        lambda f: supertrend(f["high"], f["low"], f["close"])["line"],
     ],
 )
 def test_no_lookahead(func):

@@ -166,6 +166,20 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
             base = service.repository.read(symbol.upper(), Timeframe.H1, bars * 4)
             if not base.empty:
                 frame = resample(base, tf).tail(bars)
+        if frame.empty and tf in (Timeframe.M1, Timeframe.M5, Timeframe.M15):
+            # Chart-only timeframes: the "swing" profile never asks the
+            # scheduler to store these, so fetch live on demand instead of
+            # showing an empty chart. Never touches the analysis pipeline.
+            import contextlib
+
+            from analyst.core.errors import DataUnavailableError
+
+            instrument = next(
+                (i for i in active_instruments() if i.symbol == symbol.upper()), None
+            )
+            if instrument is not None:
+                with contextlib.suppress(DataUnavailableError):
+                    frame = service.repository.load(instrument, tf, bars, refresh=True)
         return frame
 
     @app.get("/api/candles/{symbol}")
@@ -198,20 +212,25 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
         timeframe: str = Query("4h"),
         bars: int = Query(400, le=2000),
     ) -> dict:
-        """Moving averages and Ichimoku Kinko Hyo, computed server-side so the
-        chart never carries its own copy of the math -- it only plots numbers
-        the same engines already trust.
+        """Moving averages, Ichimoku, SuperTrend and MACD, computed server-side
+        so the chart never carries its own copy of the math -- it only plots
+        numbers the same engines already trust.
         """
         try:
             tf = Timeframe(timeframe)
         except ValueError:
             raise HTTPException(400, f"Unsupported timeframe: {timeframe}") from None
 
+        from analyst.indicators.oscillators import macd as macd_fn
         from analyst.indicators.trend import ema, ichimoku, sma
+        from analyst.indicators.trend import supertrend as supertrend_fn
 
         frame = _read_frame(symbol, tf, bars)
         if frame.empty:
-            return {"sma20": [], "sma50": [], "ema20": [], "ichimoku": {}}
+            return {
+                "sma20": [], "sma50": [], "ema20": [], "ichimoku": {},
+                "supertrend": {}, "macd": {},
+            }
 
         def series_points(s) -> list[dict]:
             return [
@@ -221,6 +240,8 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
             ]
 
         cloud = ichimoku(frame["high"], frame["low"], frame["close"])
+        st = supertrend_fn(frame["high"], frame["low"], frame["close"])
+        macd_df = macd_fn(frame["close"])
         return {
             "sma20": series_points(sma(frame["close"], 20)),
             "sma50": series_points(sma(frame["close"], 50)),
@@ -230,6 +251,17 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
                 "kijun": series_points(cloud["kijun"]),
                 "span_a": series_points(cloud["span_a"]),
                 "span_b": series_points(cloud["span_b"]),
+            },
+            "supertrend": {
+                # split by direction so the chart can colour each run
+                # bull/bear without inferring it client-side
+                "up": series_points(st["line"].where(st["direction"] == 1)),
+                "down": series_points(st["line"].where(st["direction"] == -1)),
+            },
+            "macd": {
+                "macd": series_points(macd_df["macd"]),
+                "signal": series_points(macd_df["signal"]),
+                "hist": series_points(macd_df["hist"]),
             },
         }
 

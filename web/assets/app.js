@@ -13,12 +13,14 @@ const State = {
   sortDir: -1,
   chart: null,
   candleSeries: null,
+  macdChart: null,
+  macdSeries: {},
   priceLines: [],
   tz: "Asia/Muscat",
   companies: [],
   selectedCompany: null,
   indicatorSeries: {},
-  indicatorsOn: { ma: true, ichimoku: false },
+  indicatorsOn: { ma: true, supertrend: false, ichimoku: false, macd: false },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -234,9 +236,9 @@ function renderDetail(row) {
   $("detailPanel").hidden = false;
   $("detailTitle").textContent = `${row.name} (${row.symbol})`;
 
-  $("tfButtons").innerHTML = ["1h", "4h", "1d"].map(
+  $("tfButtons").innerHTML = ["1m", "5m", "15m", "1h", "4h", "1d"].map(
     (tf) => `<button class="tf-btn ${tf === State.timeframe ? "active" : ""}" data-tf="${tf}">${
-      { "1h": "1H", "4h": "4H", "1d": "1D" }[tf]
+      { "1m": "1M", "5m": "5M", "15m": "15M", "1h": "1H", "4h": "4H", "1d": "1D" }[tf]
     }</button>`
   ).join("");
   document.querySelectorAll(".tf-btn").forEach((b) =>
@@ -245,6 +247,7 @@ function renderDetail(row) {
 
   renderTradePlan(row);
   renderVerdict(row);
+  renderConfluenceTable(row);
   renderSchools(row);
   contributionBars(row.contributions || [], $("contributions"));
 
@@ -296,6 +299,31 @@ function renderTradePlan(row) {
   el.innerHTML = cells.map(([cls, label, value]) =>
     `<div class="cell ${cls}"><div class="label">${label}</div><div class="value">${value}</div></div>`
   ).join("");
+}
+
+function renderConfluenceTable(row) {
+  const el = $("confluenceTable");
+  const engines = row.engines || [];
+  if (!engines.length) {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = engines.map((e) => {
+    const name = ENGINE_LABELS[e.engine] || e.engine;
+    if (e.skipped_reason) {
+      return `<div class="confluence-row">
+        <span class="system">${name}</span>
+        <span class="confluence-result"><span class="confluence-dot skip"></span>—</span>
+      </div>`;
+    }
+    const dir = { 1: ["bull", "Buy"], 0: ["neutral", "Neutral"], "-1": ["bear", "Sell"] }[
+      String(e.direction)
+    ] || ["neutral", "Neutral"];
+    return `<div class="confluence-row">
+      <span class="system">${name}</span>
+      <span class="confluence-result"><span class="confluence-dot ${dir[0]}"></span>${dir[1]}</span>
+    </div>`;
+  }).join("");
 }
 
 function renderSchools(row) {
@@ -550,6 +578,69 @@ function applyIndicators() {
       removeLineSeries(`ichimoku_${key}`);
     }
   });
+
+  const stSpecs = [
+    ["st_up", { color: "#26a69a", title: "SuperTrend" }, "up"],
+    ["st_down", { color: "#ef5350", title: "SuperTrend" }, "down"],
+  ];
+  stSpecs.forEach(([key, options, side]) => {
+    const series = data && data.supertrend && data.supertrend[side];
+    if (State.indicatorsOn.supertrend && series && series.length) {
+      ensureLineSeries(key, { ...options, lineWidth: 2 }).setData(series);
+    } else {
+      removeLineSeries(key);
+    }
+  });
+
+  applyMacd(data && data.macd);
+}
+
+function ensureMacdChart() {
+  if (State.macdChart) return State.macdChart;
+  const el = $("macdChart");
+  State.macdChart = LightweightCharts.createChart(el, {
+    layout: { background: { color: "#151b23" }, textColor: "#8b97a8", fontFamily: "Inter" },
+    grid: { vertLines: { color: "#1c242e" }, horzLines: { color: "#1c242e" } },
+    rightPriceScale: { borderColor: "#253040" },
+    timeScale: { borderColor: "#253040", timeVisible: true },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    height: 120,
+  });
+  State.macdSeries.hist = State.macdChart.addHistogramSeries({ color: "#4a9eff" });
+  State.macdSeries.macd = State.macdChart.addLineSeries({ color: "#f5a623", lineWidth: 1 });
+  State.macdSeries.signal = State.macdChart.addLineSeries({ color: "#c084fc", lineWidth: 1 });
+  new ResizeObserver(() => State.macdChart.applyOptions({ width: el.clientWidth })).observe(el);
+
+  // Keep the two time scales in lock-step, guarding against the feedback loop
+  // a naive two-way subscription would create.
+  let syncing = false;
+  const sync = (from, to) => (range) => {
+    if (syncing || !range) return;
+    syncing = true;
+    to.timeScale().setVisibleLogicalRange(range);
+    syncing = false;
+  };
+  State.chart.timeScale().subscribeVisibleLogicalRangeChange(sync(State.chart, State.macdChart));
+  State.macdChart.timeScale().subscribeVisibleLogicalRangeChange(sync(State.macdChart, State.chart));
+
+  return State.macdChart;
+}
+
+function applyMacd(macd) {
+  const el = $("macdChart");
+  if (!State.indicatorsOn.macd || !macd || !macd.macd || !macd.macd.length) {
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
+  const chart = ensureMacdChart();
+  chart.applyOptions({ width: el.clientWidth });
+  State.macdSeries.macd.setData(macd.macd);
+  State.macdSeries.signal.setData(macd.signal);
+  State.macdSeries.hist.setData(
+    (macd.hist || []).map((p) => ({ ...p, color: p.value >= 0 ? "#26a69a" : "#ef5350" }))
+  );
+  chart.timeScale().fitContent();
 }
 
 /* ------------------------------------------------------------------ stats */

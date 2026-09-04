@@ -27,19 +27,26 @@ log = logging.getLogger(__name__)
 
 #: Yahoo interval string per timeframe (4H intentionally absent — it is derived).
 _INTERVAL = {
+    Timeframe.M1: "1m",
+    Timeframe.M5: "5m",
     Timeframe.M15: "15m",
     Timeframe.H1: "1h",
     Timeframe.D1: "1d",
     Timeframe.W1: "1wk",
 }
 
-#: Yahoo refuses ranges longer than these per interval.
-_MAX_DAYS = {Timeframe.M15: 58, Timeframe.H1: 720, Timeframe.D1: 7300, Timeframe.W1: 7300}
+#: Yahoo refuses ranges longer than these per interval (1m: 7 days, 5m/15m: 58).
+_MAX_DAYS = {
+    Timeframe.M1: 7, Timeframe.M5: 58, Timeframe.M15: 58,
+    Timeframe.H1: 720, Timeframe.D1: 7300, Timeframe.W1: 7300,
+}
 
 
 class YahooProvider(PriceProvider):
     name = "yahoo"
-    native_timeframes = (Timeframe.M15, Timeframe.H1, Timeframe.D1, Timeframe.W1)
+    native_timeframes = (
+        Timeframe.M1, Timeframe.M5, Timeframe.M15, Timeframe.H1, Timeframe.D1, Timeframe.W1,
+    )
 
     def __init__(self, fallbacks: dict[str, list[str]] | None = None) -> None:
         self._fallbacks = fallbacks or {}

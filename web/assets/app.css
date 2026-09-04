@@ -129,8 +129,9 @@ tbody tr:last-child { border-bottom: 0; }
 /* ------------------------------------------------------------------ detail */
 .chart { height: 380px; width: 100%; }
 .chart-lg { height: 460px; }
+.chart-sub { height: 120px; border-top: 1px solid var(--border); }
 .chart-controls { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-.tf-buttons { display: flex; gap: 6px; }
+.tf-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
 .tf-btn {
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim);
   padding: 5px 12px; border-radius: var(--radius); font-family: var(--font); font-size: 12px; cursor: pointer;
@@ -186,6 +187,21 @@ tbody tr:last-child { border-bottom: 0; }
 .school-card .school-read { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .school-card .school-detail { font-size: 12px; color: var(--text-dim); margin-top: 5px; line-height: 1.4; }
 .school-card.skipped { opacity: .6; }
+
+/* ------------------------------------------------------------- confluence */
+.confluence-table { padding: 10px 18px 4px; }
+.confluence-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 4px; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.confluence-row:last-child { border-bottom: 0; }
+.confluence-row .system { color: var(--text-dim); }
+.confluence-result { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.confluence-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.confluence-dot.bull { background: var(--bull); }
+.confluence-dot.bear { background: var(--bear); }
+.confluence-dot.neutral { background: #f5c542; }
+.confluence-dot.skip { background: var(--border); }
 
 /* --------------------------------------------------------------- AI panel */
 .ai-head { display: flex; align-items: center; justify-content: space-between; padding-right: 18px; }

@@ -96,6 +96,61 @@ def atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> 
     return wilder_smooth(true_range(high, low, close), period)
 
 
+def supertrend(
+    high: pd.Series, low: pd.Series, close: pd.Series,
+    period: int = 10, multiplier: float = 3.0,
+) -> pd.DataFrame:
+    """SuperTrend: an ATR-banded trailing stop that flips side on a close
+    beyond the opposite band.
+
+    Each bar's line depends on the previous bar's line and side (a band only
+    tightens toward price, and a flip only happens on a genuine breakout), so
+    this is inherently sequential rather than something a rolling-window
+    vectorisation can express -- one pass over the series, same as any other
+    trailing-stop definition.
+
+    Returns a frame with `line` (the stop level) and `direction` (1 while it
+    trails below price / bullish, -1 while it trails above / bearish).
+    """
+    atr_series = atr(high, low, close, period)
+    hl2 = (high + low) / 2
+    basic_upper = (hl2 + multiplier * atr_series).to_numpy()
+    basic_lower = (hl2 - multiplier * atr_series).to_numpy()
+    close_v = close.to_numpy()
+
+    n = len(close)
+    final_upper = np.full(n, np.nan)
+    final_lower = np.full(n, np.nan)
+    line = np.full(n, np.nan)
+    direction = np.zeros(n, dtype=int)
+
+    for i in range(n):
+        if np.isnan(basic_upper[i]) or np.isnan(basic_lower[i]):
+            continue
+        if np.isnan(final_upper[i - 1]) if i > 0 else True:
+            final_upper[i], final_lower[i] = basic_upper[i], basic_lower[i]
+            direction[i] = 1 if close_v[i] >= final_lower[i] else -1
+        else:
+            final_upper[i] = (
+                basic_upper[i]
+                if basic_upper[i] < final_upper[i - 1] or close_v[i - 1] > final_upper[i - 1]
+                else final_upper[i - 1]
+            )
+            final_lower[i] = (
+                basic_lower[i]
+                if basic_lower[i] > final_lower[i - 1] or close_v[i - 1] < final_lower[i - 1]
+                else final_lower[i - 1]
+            )
+            if direction[i - 1] == 1:
+                direction[i] = -1 if close_v[i] < final_lower[i] else 1
+            else:
+                direction[i] = 1 if close_v[i] > final_upper[i] else -1
+
+        line[i] = final_lower[i] if direction[i] == 1 else final_upper[i]
+
+    return pd.DataFrame({"line": line, "direction": direction}, index=close.index)
+
+
 def atr_percent(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
     """ATR expressed as a percentage of price.
 

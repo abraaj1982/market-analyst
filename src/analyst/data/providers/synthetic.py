@@ -35,7 +35,9 @@ _ANCHORS: dict[str, tuple[float, float]] = {
 
 class SyntheticProvider(PriceProvider):
     name = "synthetic"
-    native_timeframes = (Timeframe.M15, Timeframe.H1, Timeframe.D1, Timeframe.W1)
+    native_timeframes = (
+        Timeframe.M1, Timeframe.M5, Timeframe.M15, Timeframe.H1, Timeframe.D1, Timeframe.W1,
+    )
 
     def __init__(self, seed: int = 20240101, anchor_end: pd.Timestamp | None = None) -> None:
         self.seed = seed

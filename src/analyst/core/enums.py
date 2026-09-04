@@ -29,8 +29,18 @@ class Direction(int, Enum):
 
 
 class Timeframe(str, Enum):
-    """Supported timeframes. `minutes` drives resampling and staleness checks."""
+    """Supported timeframes. `minutes` drives resampling and staleness checks.
 
+    M1 and M5 exist for chart viewing only -- fetched live on demand by the
+    dashboard (see `_read_frame` in api/app.py), never stored by the
+    scheduler and never listed in any instrument's `supported_timeframes`.
+    The confidence-score engines never see them; that boundary is what keeps
+    this an addition to the chart, not a second, higher-frequency analysis
+    pipeline the earlier swing-timeframes decision explicitly ruled out.
+    """
+
+    M1 = "1m"
+    M5 = "5m"
     M15 = "15m"
     H1 = "1h"
     H4 = "4h"
@@ -39,16 +49,23 @@ class Timeframe(str, Enum):
 
     @property
     def minutes(self) -> int:
-        return {"15m": 15, "1h": 60, "4h": 240, "1d": 1440, "1wk": 10080}[self.value]
+        return {
+            "1m": 1, "5m": 5, "15m": 15, "1h": 60, "4h": 240, "1d": 1440, "1wk": 10080,
+        }[self.value]
 
     @property
     def pandas_rule(self) -> str:
         """Offset alias used when resampling a lower timeframe into this one."""
-        return {"15m": "15min", "1h": "1h", "4h": "4h", "1d": "1D", "1wk": "1W-MON"}[self.value]
+        return {
+            "1m": "1min", "5m": "5min", "15m": "15min", "1h": "1h", "4h": "4h",
+            "1d": "1D", "1wk": "1W-MON",
+        }[self.value]
 
     @property
     def label(self) -> str:
         return {
+            "1m": "1-minute",
+            "5m": "5-minute",
             "15m": "15-minute",
             "1h": "1-hour",
             "4h": "4-hour",
