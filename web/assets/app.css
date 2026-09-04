@@ -135,6 +135,24 @@ tbody tr:last-child { border-bottom: 0; }
 }
 .tf-btn.active { background: var(--accent); color: #04121f; border-color: var(--accent); font-weight: 600; }
 
+.verdict-banner {
+  margin: 18px; padding: 14px 18px; border-radius: var(--radius);
+  border-left: 4px solid var(--neutral); background: var(--surface-2);
+  font-size: 14px; line-height: 1.5;
+}
+.verdict-banner .headline { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.verdict-banner.go { border-left-color: var(--bull); }
+.verdict-banner.go .headline { color: var(--bull); }
+.verdict-banner.wait { border-left-color: var(--neutral); }
+.verdict-banner.wait .headline { color: var(--text-dim); }
+
+.ind-toggles { display: flex; gap: 8px; padding: 0 18px 12px; }
+.ind-btn {
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim);
+  padding: 5px 12px; border-radius: var(--radius); font-family: var(--font); font-size: 12px; cursor: pointer;
+}
+.ind-btn.active { background: rgba(74,158,255,.16); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; padding: 18px; border-top: 1px solid var(--border); }
 .detail-grid h3 { margin: 0 0 12px; font-size: 13px; color: var(--text-dim); font-weight: 500; }
 @media (max-width: 900px) { .detail-grid { grid-template-columns: 1fr; } }

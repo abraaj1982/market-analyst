@@ -141,17 +141,7 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
             for r in reversed(history_for(symbol.upper(), limit))
         ]
 
-    @app.get("/api/candles/{symbol}")
-    def candles(
-        symbol: str,
-        timeframe: str = Query("4h"),
-        bars: int = Query(400, le=2000),
-    ) -> list[dict]:
-        try:
-            tf = Timeframe(timeframe)
-        except ValueError:
-            raise HTTPException(400, f"Unsupported timeframe: {timeframe}") from None
-
+    def _read_frame(symbol: str, tf: Timeframe, bars: int):
         service = state.get("service")
         if service is None:
             raise HTTPException(503, "Service is not initialised yet")
@@ -164,6 +154,20 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
             base = service.repository.read(symbol.upper(), Timeframe.H1, bars * 4)
             if not base.empty:
                 frame = resample(base, tf).tail(bars)
+        return frame
+
+    @app.get("/api/candles/{symbol}")
+    def candles(
+        symbol: str,
+        timeframe: str = Query("4h"),
+        bars: int = Query(400, le=2000),
+    ) -> list[dict]:
+        try:
+            tf = Timeframe(timeframe)
+        except ValueError:
+            raise HTTPException(400, f"Unsupported timeframe: {timeframe}") from None
+
+        frame = _read_frame(symbol, tf, bars)
         if frame.empty:
             return []
         return [
@@ -175,6 +179,47 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
             }
             for ts, r in frame.iterrows()
         ]
+
+    @app.get("/api/indicators/{symbol}")
+    def indicators(
+        symbol: str,
+        timeframe: str = Query("4h"),
+        bars: int = Query(400, le=2000),
+    ) -> dict:
+        """Moving averages and Ichimoku Kinko Hyo, computed server-side so the
+        chart never carries its own copy of the math -- it only plots numbers
+        the same engines already trust.
+        """
+        try:
+            tf = Timeframe(timeframe)
+        except ValueError:
+            raise HTTPException(400, f"Unsupported timeframe: {timeframe}") from None
+
+        from analyst.indicators.trend import ema, ichimoku, sma
+
+        frame = _read_frame(symbol, tf, bars)
+        if frame.empty:
+            return {"sma20": [], "sma50": [], "ema20": [], "ichimoku": {}}
+
+        def series_points(s) -> list[dict]:
+            return [
+                {"time": int(ts.timestamp()), "value": float(v)}
+                for ts, v in s.items()
+                if v == v  # drops NaN (warm-up period)
+            ]
+
+        cloud = ichimoku(frame["high"], frame["low"], frame["close"])
+        return {
+            "sma20": series_points(sma(frame["close"], 20)),
+            "sma50": series_points(sma(frame["close"], 50)),
+            "ema20": series_points(ema(frame["close"], 20)),
+            "ichimoku": {
+                "tenkan": series_points(cloud["tenkan"]),
+                "kijun": series_points(cloud["kijun"]),
+                "span_a": series_points(cloud["span_a"]),
+                "span_b": series_points(cloud["span_b"]),
+            },
+        }
 
     @app.get("/api/stats")
     def performance(symbol: str | None = None) -> dict:

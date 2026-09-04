@@ -17,6 +17,8 @@ const State = {
   tz: "Asia/Muscat",
   companies: [],
   selectedCompany: null,
+  indicatorSeries: {},
+  indicatorsOn: { ma: true, ichimoku: false },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -105,7 +107,12 @@ async function refresh() {
   renderStats();
   if (State.selected) {
     const row = State.rows.find((r) => r.symbol === State.selected);
-    if (row) renderDetail(row);
+    if (row) {
+      renderDetail(row);
+      await loadReport(State.selected);
+      await loadChart(State.selected);
+      await loadIndicators(State.selected);
+    }
   }
   await loadCompanies();
 }
@@ -198,6 +205,7 @@ async function selectSymbol(symbol) {
   if (row) renderDetail(row);
   await loadReport(symbol);
   await loadChart(symbol);
+  await loadIndicators(symbol);
 }
 
 function contributionBars(contributions, container) {
@@ -230,10 +238,37 @@ function renderDetail(row) {
     }</button>`
   ).join("");
   document.querySelectorAll(".tf-btn").forEach((b) =>
-    b.addEventListener("click", () => { State.timeframe = b.dataset.tf; renderDetail(row); loadChart(row.symbol); })
+    b.addEventListener("click", () => { State.timeframe = b.dataset.tf; renderDetail(row); loadChart(row.symbol); loadIndicators(row.symbol); })
   );
 
+  renderVerdict(row);
   contributionBars(row.contributions || [], $("contributions"));
+
+  document.querySelectorAll(".ind-btn").forEach((b) => {
+    b.classList.toggle("active", State.indicatorsOn[b.dataset.ind]);
+    b.onclick = () => {
+      State.indicatorsOn[b.dataset.ind] = !State.indicatorsOn[b.dataset.ind];
+      b.classList.toggle("active", State.indicatorsOn[b.dataset.ind]);
+      applyIndicators();
+    };
+  });
+}
+
+function renderVerdict(row) {
+  const el = $("verdictBanner");
+  const dir = DIRECTION[row.direction] || DIRECTION[0];
+  if (row.actionable) {
+    el.className = "verdict-banner go";
+    el.innerHTML = `<div class="headline">✅ TRADE — ${dir.label}, ${fmtPct(row.confidence)} confidence</div>
+      <div>Every hard gate passed and the timeframes agree. See "Full report" below for the entry, stop and targets.</div>`;
+    return;
+  }
+  el.className = "verdict-banner wait";
+  const reason = (row.blocking_failures && row.blocking_failures[0])
+    ? row.blocking_failures[0].detail || row.blocking_failures[0].label
+    : "confidence is too low relative to the setup";
+  el.innerHTML = `<div class="headline">⏳ WAIT — ${dir.label} lean, but not tradeable (${fmtPct(row.confidence)} confidence)</div>
+    <div>${escapeHtml(reason)}</div>`;
 }
 
 function renderGates(gates, container) {
@@ -301,6 +336,65 @@ function drawLevels(symbol) {
     State.priceLines.push(
       State.candleSeries.createPriceLine({ ...l, lineWidth: 1, lineStyle: 2, axisLabelVisible: true })
     );
+  });
+}
+
+/* -------------------------------------------------------------- indicators */
+
+async function loadIndicators(symbol) {
+  if (!State.chart) return;
+  try {
+    State.indicatorsData = await api(`/api/indicators/${symbol}?timeframe=${State.timeframe}&bars=400`);
+  } catch {
+    State.indicatorsData = null;
+  }
+  applyIndicators();
+}
+
+function ensureLineSeries(name, options) {
+  if (!State.indicatorSeries[name]) {
+    State.indicatorSeries[name] = State.chart.addLineSeries({ lineWidth: 1, ...options });
+  }
+  return State.indicatorSeries[name];
+}
+
+function removeLineSeries(name) {
+  if (State.indicatorSeries[name]) {
+    State.chart.removeSeries(State.indicatorSeries[name]);
+    delete State.indicatorSeries[name];
+  }
+}
+
+function applyIndicators() {
+  if (!State.chart) return;
+  const data = State.indicatorsData;
+
+  const maSpecs = [
+    ["sma20", { color: "#f5a623", title: "SMA 20" }],
+    ["sma50", { color: "#4a9eff", title: "SMA 50" }],
+    ["ema20", { color: "#c084fc", title: "EMA 20" }],
+  ];
+  maSpecs.forEach(([key, options]) => {
+    if (State.indicatorsOn.ma && data && data[key] && data[key].length) {
+      ensureLineSeries(key, options).setData(data[key]);
+    } else {
+      removeLineSeries(key);
+    }
+  });
+
+  const ichimokuSpecs = [
+    ["tenkan", { color: "#26a69a", title: "Tenkan-sen" }],
+    ["kijun", { color: "#ef5350", title: "Kijun-sen" }],
+    ["span_a", { color: "rgba(38,166,154,.6)", title: "Senkou A" }],
+    ["span_b", { color: "rgba(239,83,80,.6)", title: "Senkou B" }],
+  ];
+  ichimokuSpecs.forEach(([key, options]) => {
+    const series = data && data.ichimoku && data.ichimoku[key];
+    if (State.indicatorsOn.ichimoku && series && series.length) {
+      ensureLineSeries(`ichimoku_${key}`, options).setData(series);
+    } else {
+      removeLineSeries(`ichimoku_${key}`);
+    }
   });
 }
 
@@ -407,6 +501,12 @@ async function selectCompany(symbol) {
   $("companyVerdict").innerHTML =
     `<span class="badge ${badge}">${assessment.grade}</span> ` +
     `${DIRECTION[String(assessment.direction)].label} · ${fmtPct(assessment.confidence)}`;
+
+  const dir = DIRECTION[String(assessment.direction)] || DIRECTION[0];
+  const banner = $("companySummary");
+  banner.className = `verdict-banner ${assessment.direction === 0 ? "wait" : "go"}`;
+  banner.innerHTML = `<div class="headline">${dir.icon} ${dir.label} read — ${fmtPct(assessment.confidence)} confidence</div>
+    <div>${escapeHtml(assessment.summary || "Nothing has been entered for this company yet.")}</div>`;
 
   contributionBars(
     assessment.engines.map((e) => ({

@@ -63,6 +63,7 @@ class CompanyAssessment(BaseModel):
     gates: list[GateResult] = Field(default_factory=list)
     metrics: dict[str, float] = Field(default_factory=dict)
     report: str = ""
+    summary: str = ""
     missing_inputs: list[str] = Field(default_factory=list)
 
     @property
@@ -106,6 +107,7 @@ def assess(inputs: CompanyInputs, news: list[NewsItem], as_of: datetime | None =
         metrics=metrics,
         missing_inputs=missing,
     )
+    assessment.summary = build_summary(assessment, inputs)
     assessment.report = render_report(assessment, inputs)
     return assessment
 
@@ -244,6 +246,63 @@ def _missing_inputs(inputs: CompanyInputs) -> list[str]:
 # --------------------------------------------------------------------------- #
 
 
+def build_summary(assessment: CompanyAssessment, inputs: CompanyInputs) -> str:
+    """A short, plain-language read on the dividend and the news, in full
+    sentences instead of a metrics table.
+
+    Every sentence is assembled from a value the engines already computed —
+    there is no separate judgement being made here, only a different way of
+    saying the same numbers. See the module docstring for why that matters.
+    """
+    m = assessment.metrics
+    sentences: list[str] = []
+
+    years_paid = m.get("dividend_years_paid")
+    cover = m.get("dividend_cover")
+    div_yield = m.get("dividend_yield")
+    years_cut = inputs.dividend_years_cut
+
+    if years_paid is None and cover is None and div_yield is None:
+        sentences.append("No dividend figures have been entered yet, so there is no dividend read.")
+    else:
+        record = ""
+        if years_paid is not None:
+            record = f"It has paid a dividend in {int(years_paid)} of the recent years"
+            record += f", with {years_cut} cut(s) along the way" if years_cut else ", with no cuts recorded"
+            record += "."
+            sentences.append(record)
+        if cover is not None:
+            if cover >= 1.5:
+                sentences.append(f"Earnings cover the payout comfortably, at {cover:.2f}x.")
+            elif cover >= 1.0:
+                sentences.append(f"Earnings cover the payout, but with limited margin, at {cover:.2f}x.")
+            else:
+                sentences.append(
+                    f"Earnings do not cover the payout ({cover:.2f}x) — it is being funded from "
+                    "reserves or debt, which is not sustainable indefinitely."
+                )
+        if div_yield is not None:
+            note = ""
+            if div_yield > 0.10:
+                note = " — unusually high, which is more often the market pricing in a cut than a bargain"
+            sentences.append(f"At the current price the yield is {div_yield:.1%}{note}.")
+
+    items = m.get("news_items")
+    if items is None:
+        sentences.append("No announcements have been logged, so there is no news read yet.")
+    else:
+        weighted = m.get("news_weighted_sentiment", 0.0)
+        tone = "positive" if weighted > 0.2 else "negative" if weighted < -0.2 else "mixed or muted"
+        sentences.append(
+            f"Recent news coverage ({int(items)} item{'s' if items != 1 else ''}) has leaned {tone}."
+        )
+        overrides = m.get("news_manual_overrides", 0.0)
+        if overrides:
+            sentences.append(f"{int(overrides)} of those were scored by hand rather than by the lexicon.")
+
+    return " ".join(sentences)
+
+
 def render_report(assessment: CompanyAssessment, inputs: CompanyInputs) -> str:
     a = assessment
     lines = [
@@ -259,6 +318,9 @@ def render_report(assessment: CompanyAssessment, inputs: CompanyInputs) -> str:
         "> This is a dividend and news assessment, not a trade signal. Without "
         "price history there is no trend, no structure, no entry and no stop, "
         "so none are offered.",
+        "",
+        "## Summary",
+        a.summary or "Nothing has been entered for this company yet.",
     ]
 
     if a.missing_inputs:
