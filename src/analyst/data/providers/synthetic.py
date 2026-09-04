@@ -69,7 +69,15 @@ class SyntheticProvider(PriceProvider):
 
         volume = np.abs(returns) / per_bar_vol * rng.uniform(6e5, 1.4e6, n)
 
-        end = self.anchor_end or pd.Timestamp(now_utc()).floor(timeframe.pandas_rule)
+        if self.anchor_end is not None:
+            end = self.anchor_end
+        elif timeframe is Timeframe.W1:
+            # "1W-MON" is an anchored offset, not a fixed one -- .floor()
+            # rejects it outright, so round to the most recent Monday by hand.
+            now = pd.Timestamp(now_utc())
+            end = now.normalize() - pd.Timedelta(days=now.weekday())
+        else:
+            end = pd.Timestamp(now_utc()).floor(timeframe.pandas_rule)
         idx = pd.date_range(end=end, periods=n, freq=timeframe.pandas_rule, tz="UTC")
 
         return pd.DataFrame(

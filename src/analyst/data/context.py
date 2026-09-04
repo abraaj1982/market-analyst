@@ -31,6 +31,8 @@ log = logging.getLogger(__name__)
 
 #: How many bars each timeframe needs. EMA200 + swing history + percentile window.
 DEFAULT_BARS = {
+    Timeframe.M1: 1200,
+    Timeframe.M5: 1200,
     Timeframe.M15: 1200,
     Timeframe.H1: 1500,
     Timeframe.H4: 900,

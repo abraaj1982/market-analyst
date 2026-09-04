@@ -140,6 +140,42 @@ def create_app(offline: bool = False, schedule: bool = True) -> FastAPI:
 
         return get_or_generate(symbol)
 
+    @app.get("/api/analysis/{symbol}/timeframe/{timeframe}")
+    def analysis_at_timeframe(symbol: str, timeframe: str) -> dict:
+        """A live analysis anchored on one chart timeframe -- its own
+        direction, confidence and trade plan, distinct from the scheduler's
+        swing-profile one. Computed on demand and never persisted, so
+        switching timeframes on the chart always reflects the current market
+        instead of waiting for the next scheduled run.
+        """
+        try:
+            tf = Timeframe(timeframe)
+        except ValueError:
+            raise HTTPException(400, f"Unsupported timeframe: {timeframe}") from None
+
+        service = state.get("service")
+        if service is None:
+            raise HTTPException(503, "Service is not initialised yet")
+
+        instrument = next(
+            (i for i in active_instruments() if i.symbol == symbol.upper()), None
+        )
+        if instrument is None:
+            raise HTTPException(404, f"{symbol.upper()} is not on the watchlist")
+
+        from analyst.core.errors import DataUnavailableError, InsufficientDataError
+
+        try:
+            result = service.analyse_at_timeframe(instrument, tf)
+        except (DataUnavailableError, InsufficientDataError, ValueError) as exc:
+            raise HTTPException(503, str(exc)) from None
+
+        return {
+            **_summarise_result(result),
+            "report": result.report,
+            "gates": [g.model_dump(mode="json") for g in result.gates],
+        }
+
     @app.get("/api/history/{symbol}")
     def history(symbol: str, limit: int = Query(200, le=1000)) -> list[dict]:
         return [
@@ -438,4 +474,42 @@ def _summarise(row) -> dict:
             if g.get("blocking") and g.get("status") != "passed"
         ],
         "engines": payload.get("engines", []),
+    }
+
+
+def _summarise_result(result) -> dict:
+    """Same shape as `_summarise`, but read directly off a live
+    `AnalysisResult` instead of a stored DB row -- for the on-demand
+    per-timeframe endpoint, which is never persisted so there is no row to
+    build from.
+    """
+    breakdown = result.breakdown
+    return {
+        "symbol": result.symbol,
+        "name": result.name,
+        "market": result.market.value,
+        "as_of": to_utc(result.as_of).isoformat(),
+        "spot": result.spot,
+        "direction": int(result.direction.value),
+        "confidence": result.confidence,
+        "grade": result.grade.value,
+        "regime": result.regime.value,
+        "actionable": result.is_actionable,
+        "risk": result.risk.model_dump(mode="json") if result.risk else None,
+        "contributions": [c.model_dump(mode="json") for c in breakdown.contributions],
+        "raw_signed_score": breakdown.raw_signed_score,
+        "calibrated_consensus": breakdown.calibrated_consensus,
+        "coherence": breakdown.coherence,
+        "data_quality": breakdown.data_quality,
+        "news_factor": breakdown.news_factor,
+        "regime_fit": breakdown.regime_fit,
+        "active_engines": breakdown.active_engines,
+        "coverage_ratio": (
+            round(breakdown.total_effective_weight / breakdown.available_weight, 4)
+            if breakdown.available_weight else 0.0
+        ),
+        "blocking_failures": [
+            {"label": g.label, "detail": g.detail or ""} for g in result.blocking_failures
+        ],
+        "engines": [e.model_dump(mode="json") for e in result.engines],
     }

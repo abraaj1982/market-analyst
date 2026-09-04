@@ -16,6 +16,7 @@ const State = {
   macdChart: null,
   macdSeries: {},
   priceLines: [],
+  currentAnalysis: null,
   tz: "Asia/Muscat",
   companies: [],
   selectedCompany: null,
@@ -108,13 +109,9 @@ async function refresh() {
   renderTable();
   renderStats();
   if (State.selected) {
-    const row = State.rows.find((r) => r.symbol === State.selected);
-    if (row) {
-      renderDetail(row);
-      await loadReport(State.selected);
-      await loadChart(State.selected);
-      await loadIndicators(State.selected);
-    }
+    await loadTimeframeAnalysis(State.selected, State.timeframe);
+    await loadChart(State.selected);
+    await loadIndicators(State.selected);
   }
   await loadCompanies();
 }
@@ -205,9 +202,9 @@ async function selectSymbol(symbol) {
   renderTable();
   $("aiPanel").innerHTML = "";
   $("aiBtn").textContent = "Generate AI read";
-  const row = State.rows.find((r) => r.symbol === symbol);
-  if (row) renderDetail(row);
-  await loadReport(symbol);
+  const cached = State.rows.find((r) => r.symbol === symbol);
+  if (cached) renderDetail(cached); // instant paint from the swing snapshot
+  await loadTimeframeAnalysis(symbol, State.timeframe);
   await loadChart(symbol);
   await loadIndicators(symbol);
 }
@@ -242,7 +239,13 @@ function renderDetail(row) {
     }</button>`
   ).join("");
   document.querySelectorAll(".tf-btn").forEach((b) =>
-    b.addEventListener("click", () => { State.timeframe = b.dataset.tf; renderDetail(row); loadChart(row.symbol); loadIndicators(row.symbol); })
+    b.addEventListener("click", () => {
+      State.timeframe = b.dataset.tf;
+      renderDetail(row); // instant highlight of the active button
+      loadTimeframeAnalysis(State.selected, State.timeframe);
+      loadChart(State.selected);
+      loadIndicators(State.selected);
+    })
   );
 
   renderTradePlan(row);
@@ -461,13 +464,18 @@ function renderGates(gates, container) {
   }).join("");
 }
 
-async function loadReport(symbol) {
+async function loadTimeframeAnalysis(symbol, tf) {
   try {
-    const data = await api(`/api/analysis/${symbol}`);
-    $("report").textContent = data.report || "—";
-    renderGates((data.payload && data.payload.gates) || [], $("gates"));
-  } catch {
-    $("report").textContent = "Could not load the report.";
+    const result = await api(`/api/analysis/${symbol}/timeframe/${tf}`);
+    State.currentAnalysis = result;
+    renderDetail(result);
+    $("report").textContent = result.report || "—";
+    renderGates(result.gates || [], $("gates"));
+    drawLevels(symbol);
+  } catch (err) {
+    $("verdictBanner").className = "verdict-banner wait";
+    $("verdictBanner").innerHTML = `<div class="headline">⏳ Could not analyse ${escapeHtml(tf)}</div>
+      <div>${escapeHtml(err.message || "Not enough data for this timeframe yet — try another one.")}</div>`;
   }
 }
 
@@ -504,15 +512,17 @@ async function loadChart(symbol) {
 }
 
 function drawLevels(symbol) {
-  const row = State.rows.find((r) => r.symbol === symbol);
+  if (!State.candleSeries) return;
+  const analysis = State.currentAnalysis;
   State.priceLines.forEach((l) => State.candleSeries.removePriceLine(l));
   State.priceLines = [];
-  if (!row || !row.risk) return;
+  if (!analysis || analysis.symbol !== symbol || !analysis.risk) return;
+  const risk = analysis.risk;
   [
-    { price: row.risk.entry, color: "#4a9eff", title: "Entry" },
-    { price: row.risk.stop_loss, color: "#ef5350", title: "Stop" },
-    { price: row.risk.take_profit_1, color: "#26a69a", title: "TP1" },
-    { price: row.risk.take_profit_2, color: "#26a69a", title: "TP2" },
+    { price: risk.entry, color: "#4a9eff", title: "Entry" },
+    { price: risk.stop_loss, color: "#ef5350", title: "Stop" },
+    { price: risk.take_profit_1, color: "#26a69a", title: "TP1" },
+    { price: risk.take_profit_2, color: "#26a69a", title: "TP2" },
   ].forEach((l) => {
     if (l.price === null || l.price === undefined) return;
     State.priceLines.push(

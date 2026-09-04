@@ -30,7 +30,8 @@ from analyst.indicators.trend import atr
 #: below counts calendar time, so these caps keep FX/equities from being
 #: penalised for markets simply being closed.
 _SESSION_COVERAGE = {
-    Timeframe.M15: 0.72, Timeframe.H1: 0.72, Timeframe.H4: 0.72,
+    Timeframe.M1: 0.72, Timeframe.M5: 0.72, Timeframe.M15: 0.72,
+    Timeframe.H1: 0.72, Timeframe.H4: 0.72,
     Timeframe.D1: 0.72, Timeframe.W1: 1.0,
 }
 

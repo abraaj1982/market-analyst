@@ -12,6 +12,7 @@ from datetime import datetime
 from analyst.alerts.dedupe import should_alert
 from analyst.alerts.telegram import TelegramNotifier
 from analyst.core.config import (
+    ProfileSettings,
     Secrets,
     Settings,
     active_instruments,
@@ -36,6 +37,39 @@ from analyst.storage.db import init_db
 from analyst.tracking.outcomes import OutcomeTracker
 
 log = logging.getLogger(__name__)
+
+#: Which timeframes stack together as confirmation for an on-demand,
+#: per-chart-timeframe analysis. Each selected timeframe is the anchor
+#: (lightest-weighted); the ones above it confirm the direction, same
+#: shape as the swing ("1h/4h/1d") and intraday ("15m/1h/4h") profiles in
+#: settings.yaml -- H1's stack IS the swing profile, M15's IS the intraday
+#: one. D1 has no timeframe above weekly, so its stack is only two deep.
+_TIMEFRAME_STACKS: dict[Timeframe, list[Timeframe]] = {
+    Timeframe.M1: [Timeframe.M1, Timeframe.M5, Timeframe.M15],
+    Timeframe.M5: [Timeframe.M5, Timeframe.M15, Timeframe.H1],
+    Timeframe.M15: [Timeframe.M15, Timeframe.H1, Timeframe.H4],
+    Timeframe.H1: [Timeframe.H1, Timeframe.H4, Timeframe.D1],
+    Timeframe.H4: [Timeframe.H4, Timeframe.D1, Timeframe.W1],
+    Timeframe.D1: [Timeframe.D1, Timeframe.W1],
+}
+#: Anchor gets the least weight, its highest confirmation timeframe the most.
+_STACK_WEIGHTS: dict[int, tuple[float, ...]] = {3: (0.22, 0.38, 0.40), 2: (0.45, 0.55)}
+
+
+def timeframe_profile(selected: Timeframe) -> ProfileSettings:
+    """An ad-hoc confluence stack anchored on `selected`.
+
+    Used by `AnalystService.analyse_at_timeframe` to give the dashboard's
+    chart timeframe buttons their own trade plan instead of always showing
+    the scheduler's swing-profile one -- without adding a fourth+ profile to
+    settings.yaml for every button, and without ever touching the global
+    `Settings.profile` the scheduler runs on.
+    """
+    stack = _TIMEFRAME_STACKS.get(selected)
+    if stack is None:
+        raise ValueError(f"No timeframe stack defined for {selected.value}")
+    weights = _STACK_WEIGHTS[len(stack)]
+    return ProfileSettings(timeframes=stack, mtf_weights=dict(zip(stack, weights, strict=True)))
 
 
 def build_service(offline: bool = False, settings: Settings | None = None) -> AnalystService:
@@ -102,6 +136,37 @@ class AnalystService:
         self, instrument: Instrument, as_of: datetime | None = None, refresh: bool = True
     ) -> AnalysisResult:
         return self.pipeline.analyse(instrument, as_of=as_of, refresh=refresh)
+
+    def analyse_at_timeframe(
+        self, instrument: Instrument, timeframe: Timeframe, as_of: datetime | None = None,
+    ) -> AnalysisResult:
+        """A live analysis anchored on one specific chart timeframe.
+
+        Reuses this service's providers/repository/gates exactly as-is, only
+        swapping in an ad-hoc profile so the confluence stack matches
+        whichever timeframe the dashboard's chart is showing. Never
+        persisted, and the throwaway Settings/ContextBuilder/Pipeline built
+        here never touch `self.settings` or `self.pipeline` -- the
+        scheduler's swing-profile analysis is completely unaffected.
+        """
+        base_cb = self.pipeline.context_builder
+        if base_cb is None:
+            raise RuntimeError("This service's pipeline has no ContextBuilder")
+
+        settings = self.settings.model_copy(update={
+            "profile": "_adhoc",
+            "profiles": {**self.settings.profiles, "_adhoc": timeframe_profile(timeframe)},
+        })
+        context_builder = ContextBuilder(
+            repository=base_cb.repo,
+            settings=settings,
+            fundamentals=base_cb.fundamentals,
+            calendar=base_cb.calendar,
+            macro_loader=base_cb.macro_loader,
+            cot_loader=base_cb.cot_loader,
+        )
+        pipeline = Pipeline(context_builder, settings, load_gates())
+        return pipeline.analyse(instrument, as_of=as_of)
 
     def run_once(
         self,

@@ -236,10 +236,23 @@ def load_gates(path: Path | None = None) -> list[GateSpec]:
 
 
 #: Default timeframe capability per market, used when the watchlist omits it.
+#: M1/M5 are chart-only elsewhere in the system (see Timeframe's docstring),
+#: but they still need to be *reachable* here for the on-demand per-timeframe
+#: analysis (AnalystService.analyse_at_timeframe) to build a context anchored
+#: on them -- MSX is excluded since it has no intraday feed at all.
 _MARKET_DEFAULT_TFS: dict[Market, tuple[Timeframe, ...]] = {
-    Market.GLOBAL_FX: (Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1, Timeframe.W1),
-    Market.US: (Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1, Timeframe.W1),
-    Market.CRYPTO: (Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1, Timeframe.W1),
+    Market.GLOBAL_FX: (
+        Timeframe.M1, Timeframe.M5, Timeframe.M15, Timeframe.H1, Timeframe.H4,
+        Timeframe.D1, Timeframe.W1,
+    ),
+    Market.US: (
+        Timeframe.M1, Timeframe.M5, Timeframe.M15, Timeframe.H1, Timeframe.H4,
+        Timeframe.D1, Timeframe.W1,
+    ),
+    Market.CRYPTO: (
+        Timeframe.M1, Timeframe.M5, Timeframe.M15, Timeframe.H1, Timeframe.H4,
+        Timeframe.D1, Timeframe.W1,
+    ),
     Market.MSX: (Timeframe.D1, Timeframe.W1),
 }
 
